@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>AzureOpenAI.ImageGen.Cli</RootNamespace>
+    <AssemblyName>azimg</AssemblyName>
+    <PackageId>AzureOpenAI.ImageGen.Cli</PackageId>
+    <Title>Azure OpenAI Image CLI</Title>
+    <Product>Azure OpenAI Image CLI</Product>
+    <Description>Azure OpenAI image generation CLI authenticated with DefaultAzureCredential.</Description>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.AI.OpenAI" Version="2.9.0-beta.1" />
+    <PackageReference Include="Azure.Identity" Version="1.21.0" />
+    <PackageReference Include="OpenAI" Version="2.10.0" />
+  </ItemGroup>
+
+</Project>
