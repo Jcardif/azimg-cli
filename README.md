@@ -488,14 +488,15 @@ The output directory is chosen in this order:
 The default file-name template is:
 
 ```text
-{timestamp}-{slug}-{index}
+{id}-{index}
 ```
 
 Supported placeholders:
 
 | Placeholder | Meaning |
 | --- | --- |
-| `{timestamp}` | UTC timestamp like `20260428-193500` |
+| `{timestamp}` | UTC timestamp like `20260428-193500-123` |
+| `{id}` | Short per-run identifier |
 | `{slug}` | Prompt slug |
 | `{index}` | Zero-padded image index like `01` |
 | `{profile}` | Profile name slug |
@@ -704,6 +705,68 @@ dotnet publish src/AzureOpenAI.ImageGen.Cli/AzureOpenAI.ImageGen.Cli.csproj \
 The current Azure and MSAL dependency chain is not fully annotated as
 AOT-compatible by .NET's reference-verification rules, even though the plain
 `PublishAot=true` `osx-arm64` build succeeds.
+
+### Release automation
+
+This repository now includes:
+
+```text
+.github/workflows/release-and-publish.yml
+```
+
+The workflow:
+
+1. runs the test suite
+2. builds Native AOT release artifacts on macOS, Linux, and Windows runners
+3. creates or updates a GitHub release
+4. uploads release assets
+5. optionally updates Homebrew and WinGet
+
+You can trigger it in either of these ways:
+
+1. Push a tag like `v0.1.0`
+2. Run the workflow manually with a version input
+
+Release assets currently published by the workflow:
+
+- `azimg-darwin-arm64.tar.gz`
+- `azimg-linux-x64.tar.gz`
+- `azimg-windows-x64.exe`
+- `checksums.txt`
+
+The workflow pins the GitHub Actions it uses to the latest releases that were
+checked when the workflow was written.
+
+#### Repository configuration for package managers
+
+| Name | Type | Required for | Purpose |
+| --- | --- | --- | --- |
+| `HOMEBREW_TAP_REPOSITORY` | Variable | Homebrew | Target tap repo, for example `Jcardif/homebrew-tap` |
+| `HOMEBREW_TAP_TOKEN` | Secret | Homebrew | Personal access token with write access to the tap repo |
+| `WINGET_CREATE_MODE` | Variable | WinGet | Use `new` for the first submission, then `update` afterwards |
+| `WINGET_PACKAGE_IDENTIFIER` | Variable | WinGet update mode | Existing package identifier, for example `Jcardif.AzureOpenAIImageCLI` |
+| `WINGET_CREATE_GITHUB_TOKEN` | Secret | WinGet | GitHub token used by `wingetcreate` to submit to `winget-pkgs` |
+
+#### Homebrew behavior
+
+When `HOMEBREW_TAP_REPOSITORY` and `HOMEBREW_TAP_TOKEN` are configured, the
+workflow updates `Formula/azimg.rb` in your tap repo and points it at the latest
+macOS and Linux release archives.
+
+#### WinGet behavior
+
+When `WINGET_CREATE_GITHUB_TOKEN` is configured, the workflow uses
+`wingetcreate`.
+
+- For the first submission, set `WINGET_CREATE_MODE=new`
+- After the package exists in WinGet, set `WINGET_CREATE_MODE=update`
+- In `update` mode, also set `WINGET_PACKAGE_IDENTIFIER`
+
+The workflow uses the Windows release asset:
+
+```text
+azimg-windows-x64.exe
+```
 
 ## Troubleshooting
 

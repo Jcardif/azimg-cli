@@ -423,30 +423,53 @@ public sealed class AzureImageService
     }
 
     private static GeneratedImageQuality? CreateGeneratedImageQuality(string? value)
-        => value?.Trim().ToLowerInvariant() switch
+    {
+        if (string.IsNullOrWhiteSpace(value))
         {
-            null or "" or "auto" => null,
-            "low" or "medium" or "high" or "standard" => new GeneratedImageQuality(value.Trim().ToLowerInvariant()),
+            return (GeneratedImageQuality?)null;
+        }
+
+        string normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "auto" => (GeneratedImageQuality?)null,
+            "low" or "medium" or "high" or "standard" => new GeneratedImageQuality(normalized),
             _ => throw new CliException("Unsupported quality option.", ExitCodes.Validation),
         };
+    }
 
     private static GeneratedImageBackground? CreateGeneratedImageBackground(string? value)
-        => value?.Trim().ToLowerInvariant() switch
+    {
+        if (string.IsNullOrWhiteSpace(value))
         {
-            null or "" or "auto" => null,
-            "opaque" or "transparent" => new GeneratedImageBackground(value.Trim().ToLowerInvariant()),
+            return (GeneratedImageBackground?)null;
+        }
+
+        string normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "auto" => (GeneratedImageBackground?)null,
+            "opaque" or "transparent" => new GeneratedImageBackground(normalized),
             _ => throw new CliException("Unsupported background option.", ExitCodes.Validation),
         };
+    }
 
     private static GeneratedImageFileFormat? CreateGeneratedImageFileFormat(string? value)
-        => value?.Trim().ToLowerInvariant() switch
+    {
+        if (string.IsNullOrWhiteSpace(value))
         {
-            null or "" => null,
+            return (GeneratedImageFileFormat?)null;
+        }
+
+        string normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
             "png" => GeneratedImageFileFormat.Png,
             "jpeg" or "jpg" => GeneratedImageFileFormat.Jpeg,
             "webp" => GeneratedImageFileFormat.Webp,
             _ => throw new CliException("Unsupported output format option.", ExitCodes.Validation),
         };
+    }
 
     private static async Task<ImageOperationResult> ToResultAsync(
         GeneratedImageCollection payload,
@@ -530,6 +553,8 @@ public sealed class AzureImageService
 
 public sealed class FileOutputService
 {
+    private const int MaxOutputLeafLength = 200;
+
     public async Task<SaveImagesResult> SaveAsync(
         ResolvedProfile profile,
         string prompt,
@@ -542,13 +567,14 @@ public sealed class FileOutputService
         Directory.CreateDirectory(fullOutputDirectory);
 
         List<SavedImageArtifact> files = [];
-        string timestamp = result.CreatedAt.UtcDateTime.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+        string timestamp = result.CreatedAt.UtcDateTime.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture);
+        string operationId = Guid.NewGuid().ToString("N")[..8];
         string slug = Slugify(prompt);
 
         foreach (GeneratedImageArtifact image in result.Images)
         {
-            string fileName = RenderTemplate(nameTemplate, timestamp, slug, image.Index, profile);
-            string path = Path.Combine(fullOutputDirectory, $"{fileName}.{image.Extension}");
+            string fileName = RenderTemplate(nameTemplate, timestamp, operationId, slug, image.Index, profile);
+            string path = BuildOutputPath(fullOutputDirectory, fileName, $".{image.Extension}");
             await WriteFileAtomicallyAsync(path, image.Content, cancellationToken);
             files.Add(new SavedImageArtifact(image.Index, path, Hashing.ComputeSha256(image.Content), image.Content.LongLength));
         }
@@ -556,7 +582,7 @@ public sealed class FileOutputService
         string? manifestPath = null;
         if (writeManifest)
         {
-            manifestPath = Path.Combine(fullOutputDirectory, $"{RenderTemplate(nameTemplate, timestamp, slug, 0, profile)}.manifest.json");
+            manifestPath = BuildOutputPath(fullOutputDirectory, RenderTemplate(nameTemplate, timestamp, operationId, slug, 0, profile), ".manifest.json");
             ManifestDocument manifest = new(
                 prompt,
                 "azure-openai",
@@ -581,24 +607,47 @@ public sealed class FileOutputService
         }
 
         Directory.CreateDirectory(directory);
-        string tempPath = Path.Combine(directory, $"{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+        string tempPath = Path.Combine(directory, $".azimg-writing-{Guid.NewGuid():N}.tmp");
         await File.WriteAllBytesAsync(tempPath, content, cancellationToken);
         File.Move(tempPath, path, true);
     }
 
-    private static string RenderTemplate(string template, string timestamp, string slug, int index, ResolvedProfile profile)
+    private static string BuildOutputPath(string directory, string fileName, string suffix)
+        => Path.Combine(directory, CreateLeafName(fileName, suffix));
+
+    private static string CreateLeafName(string fileName, string suffix)
     {
-        string effectiveTemplate = string.IsNullOrWhiteSpace(template) ? "{timestamp}-{slug}-{index}" : template;
+        if (suffix.Length >= MaxOutputLeafLength)
+        {
+            throw new CliException("The output file suffix is too long to save safely.", ExitCodes.Io);
+        }
+
+        string normalizedName = string.IsNullOrWhiteSpace(fileName) ? "image" : fileName;
+        int maxBaseLength = MaxOutputLeafLength - suffix.Length;
+        if (normalizedName.Length > maxBaseLength)
+        {
+            throw new CliException(
+                "The rendered output file name is too long. Use a shorter --name-template or output directory.",
+                ExitCodes.Io);
+        }
+
+        return $"{normalizedName}{suffix}";
+    }
+
+    private static string RenderTemplate(string template, string timestamp, string operationId, string slug, int index, ResolvedProfile profile)
+    {
+        string effectiveTemplate = string.IsNullOrWhiteSpace(template) ? "{id}-{index}" : template;
         string fileName = effectiveTemplate
             .Replace("{timestamp}", timestamp, StringComparison.OrdinalIgnoreCase)
+            .Replace("{id}", operationId, StringComparison.OrdinalIgnoreCase)
             .Replace("{slug}", slug, StringComparison.OrdinalIgnoreCase)
             .Replace("{index}", index.ToString("D2", CultureInfo.InvariantCulture), StringComparison.OrdinalIgnoreCase)
             .Replace("{profile}", Slugify(profile.Name), StringComparison.OrdinalIgnoreCase);
 
-        return Slugify(fileName, preservePlaceholders: true);
+        return Slugify(fileName);
     }
 
-    public static string Slugify(string value, bool preservePlaceholders = false)
+    private static string Slugify(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -610,8 +659,7 @@ public sealed class FileOutputService
 
         foreach (char character in value.Trim().ToLowerInvariant())
         {
-            bool isPlaceholder = preservePlaceholders && (character == '{' || character == '}');
-            if (char.IsLetterOrDigit(character) || isPlaceholder)
+            if (char.IsLetterOrDigit(character))
             {
                 builder.Append(character);
                 previousWasSeparator = false;

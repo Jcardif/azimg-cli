@@ -79,7 +79,7 @@ public sealed class CliApplication
             parsed.Get("output-format"),
             outputCompression,
             parsed.Get("end-user-id"),
-            parsed.Get("name-template") ?? "{timestamp}-{slug}-{index}",
+            parsed.Get("name-template") ?? "{id}-{index}",
             parsed.GetFlag("write-manifest"));
 
         _validator.ValidateGenerate(request);
@@ -155,7 +155,7 @@ public sealed class CliApplication
             parsed.Get("output-format"),
             outputCompression,
             parsed.Get("end-user-id"),
-            parsed.Get("name-template") ?? "{timestamp}-{slug}-{index}",
+            parsed.Get("name-template") ?? "{id}-{index}",
             parsed.GetFlag("write-manifest"));
 
         _validator.ValidateEdit(request);
@@ -366,7 +366,7 @@ public sealed class CliApplication
         Console.WriteLine("      --output-format <value>      png, jpeg, or webp.");
         Console.WriteLine("      --output-compression <n>     Compression level 0-100.");
         Console.WriteLine("      --end-user-id <id>           Optional end-user identifier.");
-        Console.WriteLine("      --name-template <template>   Uses {timestamp}, {slug}, {index}, {profile}.");
+        Console.WriteLine("      --name-template <template>   Uses {timestamp}, {id}, {slug}, {index}, {profile}.");
         Console.WriteLine("      --write-manifest             Write a manifest JSON file.");
         Console.WriteLine("      --json                       Emit machine-readable JSON output.");
     }
@@ -388,7 +388,7 @@ public sealed class CliApplication
         Console.WriteLine("      --output-format <value>      png, jpeg, or webp.");
         Console.WriteLine("      --output-compression <n>     Compression level 0-100.");
         Console.WriteLine("      --end-user-id <id>           Optional end-user identifier.");
-        Console.WriteLine("      --name-template <template>   Uses {timestamp}, {slug}, {index}, {profile}.");
+        Console.WriteLine("      --name-template <template>   Uses {timestamp}, {id}, {slug}, {index}, {profile}.");
         Console.WriteLine("      --write-manifest             Write a manifest JSON file.");
         Console.WriteLine("      --json                       Emit machine-readable JSON output.");
     }
