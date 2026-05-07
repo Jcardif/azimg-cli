@@ -4,6 +4,12 @@ using AzureOpenAI.ImageGen.Cli.Models;
 
 namespace AzureOpenAI.ImageGen.Cli.Infrastructure;
 
+/// <summary>
+/// Provides source-generated JSON metadata for every configuration and command-output type serialized by the CLI.
+/// </summary>
+/// <remarks>
+/// Add new <see cref="JsonSerializableAttribute" /> entries here when a new model is passed to <see cref="JsonDefaults" />.
+/// </remarks>
 [JsonSourceGenerationOptions(
     JsonSerializerDefaults.Web,
     WriteIndented = true,

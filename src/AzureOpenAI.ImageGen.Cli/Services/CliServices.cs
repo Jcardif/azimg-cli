@@ -13,8 +13,14 @@ namespace AzureOpenAI.ImageGen.Cli.Services;
 
 #pragma warning disable OPENAI001
 
+/// <summary>
+/// Combines config-file profiles with command-line overrides into the values needed for one CLI operation.
+/// </summary>
 public sealed class ProfileResolver
 {
+    /// <summary>
+    /// Resolves the effective Azure OpenAI deployment, endpoint, and output directory.
+    /// </summary>
     public ResolvedProfile Resolve(AppConfig? config, ProfileOverrides overrides)
     {
         ProfileConfig? profile = null;
@@ -61,11 +67,17 @@ public sealed class ProfileResolver
     }
 }
 
+/// <summary>
+/// Validates and normalizes image generation and editing request options before Azure calls are made.
+/// </summary>
 public sealed class RequestValidator
 {
     private static readonly System.Text.RegularExpressions.Regex CustomSizePattern =
         new(@"^(?<width>\d+)x(?<height>\d+)$", System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
+    /// <summary>
+    /// Validates an image generation request before Azure calls are made.
+    /// </summary>
     public void ValidateGenerate(GenerateImageRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Prompt))
@@ -81,6 +93,9 @@ public sealed class RequestValidator
         ValidateSharedOptions(request.Size, request.Quality, request.Background, request.OutputFormat, request.OutputCompression);
     }
 
+    /// <summary>
+    /// Validates an image edit request, including local input and mask file existence.
+    /// </summary>
     public void ValidateEdit(EditImageRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Prompt))
@@ -119,6 +134,9 @@ public sealed class RequestValidator
         }
     }
 
+    /// <summary>
+    /// Normalizes a custom image size in <c>WIDTHxHEIGHT</c> format.
+    /// </summary>
     public string? NormalizeSize(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -152,6 +170,9 @@ public sealed class RequestValidator
         return $"{width}x{height}";
     }
 
+    /// <summary>
+    /// Normalizes image quality input to the values accepted by the Azure image API.
+    /// </summary>
     public string? NormalizeQuality(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -168,6 +189,9 @@ public sealed class RequestValidator
         };
     }
 
+    /// <summary>
+    /// Normalizes image background input to the values accepted by the Azure image API.
+    /// </summary>
     public string? NormalizeBackground(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -184,6 +208,9 @@ public sealed class RequestValidator
         };
     }
 
+    /// <summary>
+    /// Normalizes output image format input to the canonical file format value.
+    /// </summary>
     public string? NormalizeOutputFormat(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -202,6 +229,9 @@ public sealed class RequestValidator
     }
 }
 
+/// <summary>
+/// Provides Azure credentials for both service calls and doctor authentication checks.
+/// </summary>
 public sealed class AzureCredentialProvider
 {
     private static readonly TokenRequestContext TokenRequestContext = new([CliDefaults.AzureTokenScope]);
@@ -213,6 +243,9 @@ public sealed class AzureCredentialProvider
 
     public TokenCredential Credential => _credential;
 
+    /// <summary>
+    /// Acquires an Azure Cognitive Services bearer token with <see cref="DefaultAzureCredential" />.
+    /// </summary>
     public async Task<string> GetAccessTokenAsync(CancellationToken cancellationToken)
     {
         try
@@ -242,6 +275,9 @@ public sealed class AzureCredentialProvider
     }
 }
 
+/// <summary>
+/// Calls Azure OpenAI image generation and image editing APIs and normalizes their responses.
+/// </summary>
 public sealed class AzureImageService
 {
     private static readonly HttpClient DownloadClient = new()
@@ -258,6 +294,9 @@ public sealed class AzureImageService
         _credentialProvider = credentialProvider;
     }
 
+    /// <summary>
+    /// Generates images from a prompt using the resolved Azure OpenAI profile.
+    /// </summary>
     public async Task<ImageOperationResult> GenerateAsync(ResolvedProfile profile, GenerateImageRequest request, CancellationToken cancellationToken)
     {
         try
@@ -290,6 +329,9 @@ public sealed class AzureImageService
         }
     }
 
+    /// <summary>
+    /// Edits an existing image, optionally with a mask image, using the resolved Azure OpenAI profile.
+    /// </summary>
     public async Task<ImageOperationResult> EditAsync(ResolvedProfile profile, EditImageRequest request, CancellationToken cancellationToken)
     {
         try
@@ -551,10 +593,16 @@ public sealed class AzureImageService
     }
 }
 
+/// <summary>
+/// Saves generated image bytes and optional manifest files to the resolved output directory.
+/// </summary>
 public sealed class FileOutputService
 {
     private const int MaxOutputLeafLength = 200;
 
+    /// <summary>
+    /// Writes all returned images and, when requested, a manifest file describing the operation.
+    /// </summary>
     public async Task<SaveImagesResult> SaveAsync(
         ResolvedProfile profile,
         string prompt,
@@ -676,6 +724,9 @@ public sealed class FileOutputService
     }
 }
 
+/// <summary>
+/// Runs local diagnostics for config, output directory, selected Azure settings, and optional authentication.
+/// </summary>
 public sealed class DoctorService
 {
     private readonly AzureCredentialProvider _credentialProvider;
@@ -685,6 +736,9 @@ public sealed class DoctorService
         _credentialProvider = credentialProvider;
     }
 
+    /// <summary>
+    /// Builds a diagnostic report for the selected profile and optionally verifies Azure token acquisition.
+    /// </summary>
     public async Task<DoctorReport> RunAsync(
         string configPath,
         AppConfig? config,

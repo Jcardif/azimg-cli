@@ -3,11 +3,21 @@ using AzureOpenAI.ImageGen.Cli.Models;
 
 namespace AzureOpenAI.ImageGen.Cli.Services;
 
+/// <summary>
+/// Loads, saves, and creates CLI configuration files.
+/// </summary>
 public sealed class ConfigStore
 {
+    /// <summary>
+    /// Gets the conventional per-user config path, normally <c>~/.azimg/config.json</c>.
+    /// </summary>
     public string GetDefaultPath()
         => Path.Combine(GetHomeDirectory(), CliDefaults.ConfigDirectoryName, CliDefaults.ConfigFileName);
 
+    /// <summary>
+    /// Loads a config file from an explicit path or the default path.
+    /// </summary>
+    /// <returns>The resolved path and the parsed config, or <see langword="null" /> when the file does not exist.</returns>
     public async Task<(string Path, AppConfig? Config)> LoadAsync(string? explicitPath, CancellationToken cancellationToken)
     {
         string path = ResolvePath(explicitPath);
@@ -27,6 +37,9 @@ public sealed class ConfigStore
         return (path, config);
     }
 
+    /// <summary>
+    /// Writes a config file atomically, optionally refusing to overwrite an existing file.
+    /// </summary>
     public async Task SaveAsync(AppConfig config, string? explicitPath, bool overwrite, CancellationToken cancellationToken)
     {
         string path = ResolvePath(explicitPath);
@@ -52,6 +65,9 @@ public sealed class ConfigStore
         File.Move(tempPath, path, true);
     }
 
+    /// <summary>
+    /// Creates the starter config written by <c>azimg config init</c>.
+    /// </summary>
     public AppConfig CreateSampleConfig()
     {
         string home = GetHomeDirectory();

@@ -4,6 +4,9 @@ using AzureOpenAI.ImageGen.Cli.Services;
 
 namespace AzureOpenAI.ImageGen.Cli.Infrastructure;
 
+/// <summary>
+/// Coordinates command parsing, request validation, service calls, and console output for the CLI.
+/// </summary>
 public sealed class CliApplication
 {
     private readonly ConfigStore _configStore;
@@ -29,6 +32,9 @@ public sealed class CliApplication
         _doctorService = doctorService;
     }
 
+    /// <summary>
+    /// Dispatches the provided command-line arguments to the selected command and returns the process exit code.
+    /// </summary>
     public async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
         if (args.Length == 0 || IsHelpToken(args[0]))
@@ -422,6 +428,9 @@ public sealed class CliApplication
     }
 }
 
+/// <summary>
+/// Parsed command-line values split into named options and positional arguments.
+/// </summary>
 internal sealed class ParsedArguments
 {
     private readonly Dictionary<string, string> _options;
@@ -467,6 +476,9 @@ internal sealed class ParsedArguments
         => index >= 0 && index < _positionals.Count ? _positionals[index] : null;
 }
 
+/// <summary>
+/// Small command-line parser for the CLI's supported long options, short aliases, flags, and positionals.
+/// </summary>
 internal static class CommandLineParser
 {
     public static ParsedArguments Parse(string[] args, IReadOnlyDictionary<string, string> aliases)
