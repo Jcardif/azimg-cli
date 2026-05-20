@@ -27,3 +27,20 @@ public sealed record ImageCommandResultDocument(
 /// <param name="CommandName">The executable command name.</param>
 /// <param name="Version">The semantic version from the assembly.</param>
 public sealed record VersionDocument(string Product, string CommandName, string Version);
+
+/// <summary>
+/// JSON shape emitted by <c>azimg install-skill</c> unless <c>--format text</c> is passed.
+/// </summary>
+public sealed record AgentSkillInstallDocument(
+    string Product,
+    string CommandName,
+    string SkillName,
+    string SourceUrl,
+    string TargetPath,
+    string InstallDirectory,
+    string? SourceRef,
+    bool DryRun,
+    bool Installed,
+    bool AlreadyInstalled,
+    bool Overwritten,
+    string Message);

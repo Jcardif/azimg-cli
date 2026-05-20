@@ -1,4 +1,5 @@
 using AzImg.Cli.Application.GeneratedImages;
+using AzImg.Cli.Application.AgentSkills;
 using AzImg.Cli.Configuration;
 using AzImg.Cli.Diagnostics;
 using AzImg.Cli.Infrastructure.AzureOpenAI;
@@ -25,6 +26,7 @@ public sealed class CommandDispatcher
     private readonly DiagnosticService _diagnosticService;
     private readonly HelpTextProvider _helpText;
     private readonly IUpdateService _updateService;
+    private readonly IAgentSkillInstaller _agentSkillInstaller;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CommandDispatcher" /> class.
@@ -37,7 +39,8 @@ public sealed class CommandDispatcher
         ImageFileStore imageFileStore,
         DiagnosticService diagnosticService,
         HelpTextProvider helpText,
-        IUpdateService? updateService = null)
+        IUpdateService? updateService = null,
+        IAgentSkillInstaller? agentSkillInstaller = null)
     {
         _configurationStore = configurationStore;
         _profileResolver = profileResolver;
@@ -47,6 +50,7 @@ public sealed class CommandDispatcher
         _diagnosticService = diagnosticService;
         _helpText = helpText;
         _updateService = updateService ?? NoOpUpdateService.Instance;
+        _agentSkillInstaller = agentSkillInstaller ?? NoOpAgentSkillInstaller.Instance;
     }
 
     /// <summary>
@@ -74,6 +78,7 @@ public sealed class CommandDispatcher
             "edit" => await RunEditAsync(commandArgs, cancellationToken),
             "doctor" => await RunDoctorAsync(commandArgs, cancellationToken),
             "config" => await RunConfigAsync(commandArgs, cancellationToken),
+            "install-skill" => await RunInstallSkillAsync(commandArgs, cancellationToken),
             "update" => await RunUpdateAsync(commandArgs, cancellationToken),
             "version" => RunVersion(commandArgs),
             _ => throw new CliException($"Unknown command '{args[0]}'. Run '{CliDefaults.CommandName} --help' for usage.", ExitCodes.Usage),
@@ -394,6 +399,34 @@ public sealed class CommandDispatcher
         return ExitCodes.Success;
     }
 
+    private async Task<int> RunInstallSkillAsync(string[] args, CancellationToken cancellationToken)
+    {
+        ParsedArguments parsed = CommandLineParser.Parse(args, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["h"] = "help",
+            ["?"] = "help",
+        }, CreateInstallSkillValueOptions(), CreateInstallSkillFlagOptions());
+
+        if (parsed.GetFlag("help"))
+        {
+            _helpText.WriteInstallSkillHelp(Console.Out);
+            return ExitCodes.Success;
+        }
+
+        parsed.ThrowIfExtraPositionals(0, "install-skill does not accept positional arguments.");
+        bool json = parsed.RequestsJsonOutput();
+        AgentSkillInstallOptions options = new(
+            parsed.Get("install-dir"),
+            parsed.Get("ref"),
+            parsed.Get("source-url"),
+            parsed.GetFlag("dry-run"),
+            parsed.GetFlag("force"));
+
+        AgentSkillInstallResult result = await _agentSkillInstaller.InstallAsync(options, Console.Error, cancellationToken);
+        WriteAgentSkillInstall(result, json);
+        return ExitCodes.Success;
+    }
+
     private async Task<int> RunUpdateAsync(string[] args, CancellationToken cancellationToken)
     {
         ParsedArguments parsed = CommandLineParser.Parse(args, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -463,6 +496,33 @@ public sealed class CommandDispatcher
         }
 
         Console.WriteLine(document.Message);
+    }
+
+    private static void WriteAgentSkillInstall(AgentSkillInstallResult result, bool json)
+    {
+        AgentSkillInstallDocument document = new(
+            CliDefaults.ProductName,
+            CliDefaults.CommandName,
+            result.SkillName,
+            result.SourceUrl,
+            result.TargetPath,
+            result.InstallDirectory,
+            result.SourceRef,
+            result.DryRun,
+            result.Installed,
+            result.AlreadyInstalled,
+            result.Overwritten,
+            result.Message);
+
+        if (json)
+        {
+            Console.WriteLine(JsonDefaults.Serialize(document, CliJsonContext.Default.AgentSkillInstallDocument));
+            return;
+        }
+
+        Console.WriteLine(document.Message);
+        Console.WriteLine($"source: {document.SourceUrl}");
+        Console.WriteLine($"target: {document.TargetPath}");
     }
 
     private static string FormatImageCount(int count)
@@ -544,6 +604,15 @@ public sealed class CommandDispatcher
             "format",
         };
 
+    private static HashSet<string> CreateInstallSkillValueOptions()
+        => new(StringComparer.OrdinalIgnoreCase)
+        {
+            "install-dir",
+            "ref",
+            "source-url",
+            "format",
+        };
+
     private static HashSet<string> CreateHelpFlagOptions()
         => new(StringComparer.OrdinalIgnoreCase)
         {
@@ -573,6 +642,14 @@ public sealed class CommandDispatcher
     }
 
     private static HashSet<string> CreateUpdateFlagOptions()
+    {
+        HashSet<string> options = CreateHelpFlagOptions();
+        options.Add("dry-run");
+        options.Add("force");
+        return options;
+    }
+
+    private static HashSet<string> CreateInstallSkillFlagOptions()
     {
         HashSet<string> options = CreateHelpFlagOptions();
         options.Add("dry-run");

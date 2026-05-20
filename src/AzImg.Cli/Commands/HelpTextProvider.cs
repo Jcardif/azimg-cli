@@ -21,6 +21,7 @@ public sealed class HelpTextProvider
         writer.WriteLine("  edit       Edit an existing image, optionally using a mask.");
         writer.WriteLine("  doctor     Validate configuration, credentials, and output setup.");
         writer.WriteLine("  config     Initialize, inspect, or update CLI configuration.");
+        writer.WriteLine("  install-skill Install the AzImg agent skill.");
         writer.WriteLine("  update     Check for or install a newer azimg release.");
         writer.WriteLine("  version    Display version information.");
         writer.WriteLine();
@@ -81,6 +82,20 @@ public sealed class HelpTextProvider
     {
         writer.WriteLine($"Usage: {CliDefaults.CommandName} version [options]");
         writer.WriteLine("Options:");
+        WriteStructuredOutputOptions(writer);
+    }
+
+    /// <summary>Writes help for installing the AzImg agent skill.</summary>
+    public void WriteInstallSkillHelp(TextWriter writer)
+    {
+        writer.WriteLine($"Usage: {CliDefaults.CommandName} install-skill [options]");
+        writer.WriteLine($"Installs the AzImg agent skill to ~/{CliDefaults.AgentsDirectoryName}/{CliDefaults.AgentSkillsDirectoryName}/{CliDefaults.AgentSkillName}/{CliDefaults.AgentSkillFileName}.");
+        writer.WriteLine("Options:");
+        writer.WriteLine($"      --install-dir <path>         Agent skills root directory. Default: ~/{CliDefaults.AgentsDirectoryName}/{CliDefaults.AgentSkillsDirectoryName}.");
+        writer.WriteLine("      --ref <ref>                  Git branch, tag, or commit. Default: current CLI version tag.");
+        writer.WriteLine("      --source-url <url>           Explicit SKILL.md URL. Overrides --ref.");
+        writer.WriteLine("      --dry-run                    Show download and save paths without changing files.");
+        writer.WriteLine("      --force                      Overwrite an existing different SKILL.md.");
         WriteStructuredOutputOptions(writer);
     }
 

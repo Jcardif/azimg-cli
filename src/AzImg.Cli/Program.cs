@@ -1,4 +1,5 @@
 using AzImg.Cli.Application.GeneratedImages;
+using AzImg.Cli.Application.AgentSkills;
 using AzImg.Cli.Commands;
 using AzImg.Cli.Configuration;
 using AzImg.Cli.Diagnostics;
@@ -23,6 +24,7 @@ ImageFileStore imageFileStore = new();
 DiagnosticService diagnosticService = new(credentialProvider);
 HelpTextProvider helpText = new();
 UpdateService updateService = new();
+AgentSkillInstaller agentSkillInstaller = new();
 CommandDispatcher application = new(
     configurationStore,
     profileResolver,
@@ -31,7 +33,8 @@ CommandDispatcher application = new(
     imageFileStore,
     diagnosticService,
     helpText,
-    updateService);
+    updateService,
+    agentSkillInstaller);
 
 try
 {

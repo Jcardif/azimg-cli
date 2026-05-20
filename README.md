@@ -11,6 +11,7 @@ The executable command is `azimg`.
 - Azure OpenAI image generation and image editing workflows.
 - Local config profiles for endpoint, deployment, and output directory defaults.
 - Optional manifests with paths, checksums, usage, deployment, and timestamps.
+- Installable agent skill that helps AI agents use `azimg` correctly.
 
 ## 📦 Installation
 
@@ -35,6 +36,24 @@ curl -fsSL \
 iwr https://raw.githubusercontent.com/Jcardif/azimg-cli/main/install.ps1 `
   -UseB | iex
 ```
+
+### Agent skill
+
+The CLI ships with an agent skill for AI agents.
+
+It helps them use `azimg` for image generation and editing. Install it with:
+
+```bash
+azimg install-skill --format text
+```
+
+The command downloads `skills/azimg/SKILL.md` from GitHub by default.
+
+It uses the current CLI version tag and reports the source URL.
+
+It saves the skill to `~/.agents/skills/azimg/SKILL.md`.
+
+Use `--ref main` to install the latest committed skill from the default branch.
 
 ## 🔐 Authentication
 
@@ -122,6 +141,7 @@ Commands below omit the leading `azimg` unless the command is global.
 | `config` or `config show` | Print the current config. | None. |
 | `config init` | Create a starter config. | None. |
 | `config set-default-profile` | Set default profile. | `--profile <NAME>` |
+| `install-skill` | Install the AzImg agent skill. | None. |
 | `update check` | Check for a newer release. | None. |
 | `update` or `update apply` | Install the selected release. | None. |
 | `version` | Print version information. | None. |
@@ -169,6 +189,15 @@ Use these with `generate` and `edit`.
 - `--manifest-url <URL>` uses an explicit release manifest.
 - `--dry-run` previews update work without changing files.
 - `--force` reinstalls even when the selected release is already current.
+
+### Agent skill options
+
+- `install-skill` downloads and installs the AzImg skill.
+- `--install-dir <PATH>` selects the agent skills root directory.
+- `--ref <BRANCH|TAG|SHA>` selects the GitHub ref for `SKILL.md`.
+- `--source-url <URL>` downloads `SKILL.md` from an explicit URL.
+- `--dry-run` previews the download source and save path.
+- `--force` overwrites an existing different `SKILL.md` file.
 
 ### Output formatting
 

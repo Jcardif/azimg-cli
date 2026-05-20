@@ -63,6 +63,7 @@ public static class JsonDefaults
 [JsonSerializable(typeof(ImageManifestDocument))]
 [JsonSerializable(typeof(DiagnosticReportDocument))]
 [JsonSerializable(typeof(VersionDocument))]
+[JsonSerializable(typeof(AgentSkillInstallDocument))]
 [JsonSerializable(typeof(ReleaseManifestDocument))]
 [JsonSerializable(typeof(ReleaseAssetDocument[]))]
 [JsonSerializable(typeof(LocalMetadataDocument))]

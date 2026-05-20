@@ -70,6 +70,24 @@ public static class CliDefaults
     /// <summary>The latest-release manifest URL consumed by installers and self-update.</summary>
     public const string LatestReleaseManifestUrl = "https://github.com/Jcardif/azimg-cli/releases/latest/download/azimg-release.json";
 
+    /// <summary>The GitHub raw-content base URL for the CLI repository.</summary>
+    public const string GitHubRawBaseUrl = "https://raw.githubusercontent.com/Jcardif/azimg-cli";
+
+    /// <summary>The agent skill installed by <c>azimg install-skill</c>.</summary>
+    public const string AgentSkillName = "azimg";
+
+    /// <summary>The top-level hidden directory that stores agent customizations.</summary>
+    public const string AgentsDirectoryName = ".agents";
+
+    /// <summary>The subdirectory under <see cref="AgentsDirectoryName" /> that stores skills.</summary>
+    public const string AgentSkillsDirectoryName = "skills";
+
+    /// <summary>The skill definition file name installed for the AzImg agent skill.</summary>
+    public const string AgentSkillFileName = "SKILL.md";
+
+    /// <summary>The repository-relative path to the AzImg agent skill definition.</summary>
+    public const string AgentSkillRepositoryPath = "skills/azimg/SKILL.md";
+
     /// <summary>The Azure Cognitive Services token scope used for Azure OpenAI requests.</summary>
     public const string AzureTokenScope = "https://cognitiveservices.azure.com/.default";
 
@@ -81,6 +99,9 @@ public static class CliDefaults
 
     /// <summary>The longer timeout used when downloading a release archive during explicit updates.</summary>
     public static TimeSpan UpdateDownloadTimeout { get; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>The timeout used when downloading the small agent skill markdown file.</summary>
+    public static TimeSpan AgentSkillDownloadTimeout { get; } = TimeSpan.FromSeconds(30);
 }
 
 /// <summary>
