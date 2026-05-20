@@ -1,0 +1,26 @@
+# Build outputs
+bin/
+obj/
+publish/
+TestResults/
+artifacts/
+
+# Package artifacts
+*.nupkg
+*.snupkg
+
+# User-specific files
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+
+# IDE settings
+.vs/
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Library/

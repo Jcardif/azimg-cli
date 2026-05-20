@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AzImg.Cli/AzImg.Cli.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AzImg.Cli.Tests/AzImg.Cli.Tests.csproj" />
+  </Folder>
+</Solution>
