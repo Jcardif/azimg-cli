@@ -13,7 +13,7 @@ usage() {
 Usage: eng/publish-release.sh --rid <rid> [options]
 
 Options:
-  --rid <rid>          Target RID: win-x64, win-arm64, osx-arm64, osx-x64, or linux-x64.
+  --rid <rid>          Target RID: win-x64, win-arm64, osx-arm64, or linux-x64.
   --version <version>  Version to stamp into the published binary. Default: 0.1.0.
   --output <path>      Artifact root. Default: ./artifacts.
   --mode <mode>        single-file, trimmed, or aot. Default: single-file.
@@ -62,7 +62,7 @@ case "$rid" in
     executable="azimg.exe"
     archive_type="zip"
     ;;
-  osx-arm64|osx-x64|linux-x64)
+  osx-arm64|linux-x64)
     executable="azimg"
     archive_type="tar.gz"
     ;;

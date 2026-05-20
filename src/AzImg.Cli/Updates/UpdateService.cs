@@ -778,7 +778,6 @@ public static class RuntimeRidDetector
         {
             return RuntimeInformation.ProcessArchitecture switch
             {
-                Architecture.X64 => "osx-x64",
                 Architecture.Arm64 => "osx-arm64",
                 _ => throw UnsupportedArchitecture(),
             };

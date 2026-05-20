@@ -76,9 +76,6 @@ detect_rid() {
     Darwin:arm64|Darwin:aarch64)
       echo "osx-arm64"
       ;;
-    Darwin:x86_64|Darwin:amd64)
-      echo "osx-x64"
-      ;;
     Linux:x86_64|Linux:amd64)
       echo "linux-x64"
       ;;

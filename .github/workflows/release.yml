@@ -73,11 +73,6 @@ jobs:
             executable: azimg
             archiveType: tar.gz
             canRun: true
-          - rid: osx-x64
-            runner: macos-13
-            executable: azimg
-            archiveType: tar.gz
-            canRun: true
           - rid: linux-x64
             runner: ubuntu-latest
             executable: azimg
@@ -125,10 +120,6 @@ jobs:
           $exe = Join-Path $PWD "artifacts/publish/${{ matrix.rid }}/${{ matrix.executable }}"
           if ('${{ matrix.rid }}' -eq 'osx-arm64' -and (-not $IsMacOS -or (uname -m) -ne 'arm64')) {
             Write-Host "Skipping osx-arm64 smoke test because this runner is not macOS ARM64."
-            exit 0
-          }
-          if ('${{ matrix.rid }}' -eq 'osx-x64' -and (-not $IsMacOS -or (uname -m) -ne 'x86_64')) {
-            Write-Host "Skipping osx-x64 smoke test because this runner is not macOS x64."
             exit 0
           }
           if (-not $IsWindows) { chmod +x $exe }

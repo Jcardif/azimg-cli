@@ -20,7 +20,6 @@ Supported release platforms:
 - Windows x64: `win-x64`
 - Windows ARM64: `win-arm64`
 - macOS Apple Silicon: `osx-arm64`
-- macOS Intel: `osx-x64`
 - Linux x64: `linux-x64`
 
 ### macOS and Linux
