@@ -56,7 +56,8 @@ Use `--ref main` to install the latest committed skill from the default branch.
 
 ## 🔐 Authentication
 
-AzImg CLI uses `AzureCliCredential`; token storage is delegated to Azure CLI.
+AzImg CLI uses the current Azure CLI sign-in via `az account get-access-token`;
+token storage is delegated to Azure CLI.
 
 ```bash
 # Login via Azure CLI first
@@ -87,8 +88,11 @@ az role assignment create \
 Generate the `azimg-cli` repository banner:
 
 ```bash
+prompt="Generate a banner image 16:9 for a repo for azimg-cli,"
+prompt="$prompt a command-line tool that generates images with Azure OpenAI."
+
 azimg generate \
-  "Generate a banner image 16:9 for a repo for azimg-cli, a command-line tool that generates images with Azure OpenAI." \
+  "$prompt" \
   --profile azure-default \
   --count 1 \
   --size 1536x864 \

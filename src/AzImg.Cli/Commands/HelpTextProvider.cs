@@ -57,7 +57,7 @@ public sealed class HelpTextProvider
         writer.WriteLine($"Usage: {CliDefaults.CommandName} doctor [options]");
         writer.WriteLine("Options:");
         WriteProfileOptions(writer);
-        writer.WriteLine("      --verify-auth                Acquire a real Azure bearer token with AzureCliCredential.");
+        writer.WriteLine("      --verify-auth                Acquire a real Azure bearer token from the Azure CLI sign-in.");
         WriteStructuredOutputOptions(writer);
     }
 

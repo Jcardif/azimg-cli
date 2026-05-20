@@ -88,7 +88,7 @@ public sealed class AzureOpenAIImageClient : IGeneratedImageClient
         catch (AuthenticationFailedException ex)
         {
             throw new CliException(
-                $"AzureCliCredential failed to get an Azure token. Run 'az login' and try again. {ex.Message}",
+                $"Azure CLI failed to get an Azure token. Run 'az login' and try again. {ex.Message}",
                 ExitCodes.Authentication);
         }
     }
@@ -150,7 +150,7 @@ public sealed class AzureOpenAIImageClient : IGeneratedImageClient
         catch (AuthenticationFailedException ex)
         {
             throw new CliException(
-                $"AzureCliCredential failed to get an Azure token. Run 'az login' and try again. {ex.Message}",
+                $"Azure CLI failed to get an Azure token. Run 'az login' and try again. {ex.Message}",
                 ExitCodes.Authentication);
         }
     }

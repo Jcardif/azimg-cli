@@ -60,7 +60,7 @@ public sealed class DiagnosticService
             checks.Add(new DiagnosticCheck(
                 "azure-identity",
                 true,
-                "This CLI uses AzureCliCredential. Run with --verify-auth to test the current Azure CLI sign-in."));
+                "This CLI uses the current Azure CLI sign-in. Run with --verify-auth to test token acquisition."));
         }
         else
         {
