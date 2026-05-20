@@ -3,6 +3,7 @@ bin/
 obj/
 publish/
 TestResults/
+artifacts/
 
 # Package artifacts
 *.nupkg

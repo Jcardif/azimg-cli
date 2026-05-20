@@ -1,8 +1,0 @@
-<Solution>
-  <Folder Name="/src/">
-    <Project Path="src/AzureOpenAI.ImageGen.Cli/AzureOpenAI.ImageGen.Cli.csproj" />
-  </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/AzureOpenAI.ImageGen.Cli.Tests/AzureOpenAI.ImageGen.Cli.Tests.csproj" />
-  </Folder>
-</Solution>
