@@ -66,6 +66,19 @@ public sealed class ParsedArguments
     public string? GetPositionalOrDefault(int index)
         => index >= 0 && index < _positionals.Count ? _positionals[index] : null;
 
+    /// <summary>Gets the number of positional arguments supplied after option parsing.</summary>
+    public int PositionalCount => _positionals.Count;
+
+    /// <summary>Throws when more positional arguments were supplied than a command supports.</summary>
+    /// <exception cref="CliException">Thrown when extra positionals are present.</exception>
+    public void ThrowIfExtraPositionals(int allowedCount, string errorMessage)
+    {
+        if (_positionals.Count > allowedCount)
+        {
+            throw new CliException(errorMessage, ExitCodes.Usage);
+        }
+    }
+
     /// <summary>
     /// Gets whether the parsed command should emit machine-readable JSON output.
     /// </summary>
@@ -109,9 +122,28 @@ public static class CommandLineParser
     /// <returns>The parsed command arguments.</returns>
     /// <exception cref="CliException">Thrown when an unknown short option is supplied.</exception>
     public static ParsedArguments Parse(string[] args, IReadOnlyDictionary<string, string> aliases)
+        => Parse(args, aliases, valueOptions: null, flagOptions: null);
+
+    /// <summary>
+    /// Parses command arguments with a strict long-option schema.
+    /// </summary>
+    /// <param name="args">The command-specific arguments to parse.</param>
+    /// <param name="aliases">Short-option aliases accepted by the command.</param>
+    /// <param name="valueOptions">Long option names that require values.</param>
+    /// <param name="flagOptions">Long option names that do not consume following positional values.</param>
+    /// <returns>The parsed command arguments.</returns>
+    /// <exception cref="CliException">Thrown when an option is unknown or a value is missing.</exception>
+    public static ParsedArguments Parse(
+        string[] args,
+        IReadOnlyDictionary<string, string> aliases,
+        IReadOnlySet<string>? valueOptions,
+        IReadOnlySet<string>? flagOptions)
     {
         Dictionary<string, string> options = new(StringComparer.OrdinalIgnoreCase);
         List<string> positionals = [];
+        bool strict = valueOptions is not null || flagOptions is not null;
+        valueOptions ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        flagOptions ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         for (int index = 0; index < args.Length; index++)
         {
@@ -136,16 +168,36 @@ public static class CommandLineParser
                 {
                     name = optionToken[..separator];
                     value = optionToken[(separator + 1)..];
+                    ValidateLongOption(name, valueOptions, flagOptions, strict, token);
+                    if (strict && valueOptions.Contains(name) && value.Length == 0)
+                    {
+                        throw new CliException($"Option '--{name}' expects a value.", ExitCodes.Usage);
+                    }
+
+                    if (strict && flagOptions.Contains(name))
+                    {
+                        ValidateFlagValue(name, value);
+                    }
                 }
                 else
                 {
                     name = optionToken;
-                    if (index + 1 < args.Length && !LooksLikeOption(args[index + 1]))
+                    ValidateLongOption(name, valueOptions, flagOptions, strict, token);
+                    if (strict && flagOptions.Contains(name))
+                    {
+                        value = "true";
+                    }
+                    else if (index + 1 < args.Length && !LooksLikeLongOption(args[index + 1]) && args[index + 1] != "--")
                     {
                         value = args[++index];
                     }
                     else
                     {
+                        if (strict && valueOptions.Contains(name))
+                        {
+                            throw new CliException($"Option '--{name}' expects a value.", ExitCodes.Usage);
+                        }
+
                         value = "true";
                     }
                 }
@@ -163,12 +215,21 @@ public static class CommandLineParser
                 }
 
                 string value;
-                if (index + 1 < args.Length && !LooksLikeOption(args[index + 1]))
+                if (strict && flagOptions.Contains(mappedName))
+                {
+                    value = "true";
+                }
+                else if (index + 1 < args.Length && !LooksLikeLongOption(args[index + 1]) && args[index + 1] != "--")
                 {
                     value = args[++index];
                 }
                 else
                 {
+                    if (strict && valueOptions.Contains(mappedName))
+                    {
+                        throw new CliException($"Option '{token}' expects a value.", ExitCodes.Usage);
+                    }
+
                     value = "true";
                 }
 
@@ -182,7 +243,36 @@ public static class CommandLineParser
         return new ParsedArguments(options, positionals);
     }
 
-    private static bool LooksLikeOption(string value)
-        => value.StartsWith("--", StringComparison.Ordinal)
-           || (value.StartsWith("-", StringComparison.Ordinal) && value.Length > 1);
+    private static void ValidateLongOption(
+        string name,
+        IReadOnlySet<string> valueOptions,
+        IReadOnlySet<string> flagOptions,
+        bool strict,
+        string token)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new CliException($"Invalid option '{token}'.", ExitCodes.Usage);
+        }
+
+        if (strict && !valueOptions.Contains(name) && !flagOptions.Contains(name))
+        {
+            throw new CliException($"Unknown option '--{name}'.", ExitCodes.Usage);
+        }
+    }
+
+    private static void ValidateFlagValue(string name, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)
+            || value.Equals("true", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("false", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        throw new CliException($"Option '--{name}' is a flag and only accepts true or false when assigned explicitly.", ExitCodes.Usage);
+    }
+
+    private static bool LooksLikeLongOption(string value)
+        => value.StartsWith("--", StringComparison.Ordinal);
 }

@@ -133,3 +133,44 @@ public sealed record CliErrorDocument(CliErrorInfo Error);
 /// <param name="Message">The human-readable error message.</param>
 /// <param name="ExitCode">The process exit code that accompanies the error.</param>
 public sealed record CliErrorInfo(string Code, string Message, int ExitCode);
+
+/// <summary>
+/// Expands user-facing path shorthand before paths are normalized by the file system.
+/// </summary>
+public static class CliPath
+{
+    /// <summary>
+    /// Expands <c>~</c>, <c>~/...</c>, and <c>~\...</c> to the current user's home directory.
+    /// </summary>
+    public static string ExpandUserHome(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return path;
+        }
+
+        string trimmed = path.Trim();
+        if (trimmed == "~")
+        {
+            return GetHomeDirectory();
+        }
+
+        if (trimmed.StartsWith("~/", StringComparison.Ordinal) || trimmed.StartsWith("~\\", StringComparison.Ordinal))
+        {
+            return Path.Combine(GetHomeDirectory(), trimmed[2..]);
+        }
+
+        return path;
+    }
+
+    /// <summary>Expands supported shorthand and returns a full path.</summary>
+    public static string GetFullPath(string path)
+        => Path.GetFullPath(ExpandUserHome(path));
+
+    /// <summary>Gets the current user's home directory or the application base directory as a fallback.</summary>
+    public static string GetHomeDirectory()
+    {
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return string.IsNullOrWhiteSpace(home) ? AppContext.BaseDirectory : home;
+    }
+}

@@ -65,6 +65,20 @@ public class UpdateCommandTests
     }
 
     [Fact]
+    public async Task Update_RejectsPositionalActionWhenActionOptionIsSupplied()
+    {
+        FakeUpdateService updateService = new();
+        CommandDispatcher application = CreateApplication(updateService);
+
+        CliException exception = await Assert.ThrowsAsync<CliException>(() => application.RunAsync(["update", "check", "--action", "apply"], CancellationToken.None));
+
+        Assert.Equal(ExitCodes.Usage, exception.ExitCode);
+        Assert.Contains("action positional", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(0, updateService.CheckCalls);
+        Assert.Equal(0, updateService.ApplyCalls);
+    }
+
+    [Fact]
     public async Task FirstLaunchCheck_RunsBeforeNormalCommandsWithoutStdoutPollution()
     {
         FakeUpdateService updateService = new()

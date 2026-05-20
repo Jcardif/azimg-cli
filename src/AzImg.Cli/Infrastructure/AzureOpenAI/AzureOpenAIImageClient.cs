@@ -13,6 +13,18 @@ namespace AzImg.Cli.Infrastructure.AzureOpenAI;
 #pragma warning disable OPENAI001
 
 /// <summary>
+/// Defines the image operations needed by the command dispatcher.
+/// </summary>
+public interface IGeneratedImageClient
+{
+    /// <summary>Generates images from a text prompt.</summary>
+    Task<GeneratedImageResult> GenerateAsync(ResolvedProfile profile, GenerateImageRequest request, CancellationToken cancellationToken);
+
+    /// <summary>Edits an existing image using a text prompt.</summary>
+    Task<GeneratedImageResult> EditAsync(ResolvedProfile profile, EditImageRequest request, CancellationToken cancellationToken);
+}
+
+/// <summary>
 /// Calls Azure OpenAI image generation and image editing APIs and normalizes their responses.
 /// </summary>
 /// <remarks>
@@ -21,7 +33,7 @@ namespace AzImg.Cli.Infrastructure.AzureOpenAI;
 /// requests before this service is called; this class focuses on SDK option mapping, response conversion,
 /// authentication failure handling, and image-byte download fallback.
 /// </remarks>
-public sealed class AzureOpenAIImageClient
+public sealed class AzureOpenAIImageClient : IGeneratedImageClient
 {
     private static readonly HttpClient DownloadClient = new()
     {
@@ -310,7 +322,25 @@ public sealed class AzureOpenAIImageClient
         {
             try
             {
-                return await DownloadClient.GetByteArrayAsync(image.ImageUri, cancellationToken).ConfigureAwait(false);
+                using HttpResponseMessage response = await DownloadClient.GetAsync(image.ImageUri, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new CliException(
+                        $"The service returned an image URL, but the CLI could not download it. The download returned HTTP {(int)response.StatusCode}.",
+                        ExitCodes.Unhandled);
+                }
+
+                return await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (TaskCanceledException ex)
+            {
+                throw new CliException(
+                    $"The service returned an image URL, but the CLI timed out while downloading it. {ex.Message}",
+                    ExitCodes.Unhandled);
             }
             catch (HttpRequestException ex)
             {

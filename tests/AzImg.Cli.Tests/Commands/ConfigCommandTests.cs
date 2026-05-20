@@ -41,6 +41,17 @@ public class ConfigCommandTests
         Assert.Contains("\"profiles\":", output, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Config_RejectsPositionalActionWhenActionOptionIsSupplied()
+    {
+        CommandDispatcher application = CreateApplication();
+
+        CliException exception = await Assert.ThrowsAsync<CliException>(() => application.RunAsync(["config", "show", "--action", "init"], CancellationToken.None));
+
+        Assert.Equal(ExitCodes.Usage, exception.ExitCode);
+        Assert.Contains("action positional", exception.Message, StringComparison.Ordinal);
+    }
+
     private static CommandDispatcher CreateApplication()
     {
         AzureCliCredentialProvider credentialProvider = new();

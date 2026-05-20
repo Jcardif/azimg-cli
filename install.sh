@@ -20,13 +20,32 @@ Options:
 USAGE
 }
 
+require_value() {
+  option="$1"
+  if [ "$#" -lt 2 ] || [ -z "$2" ]; then
+    echo "$option requires a value." >&2
+    usage >&2
+    exit 1
+  fi
+
+  case "$2" in
+    -*)
+      echo "$option requires a value." >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --version)
+      require_value "$1" "${2:-}"
       version="$2"
       shift 2
       ;;
     --install-dir)
+      require_value "$1" "${2:-}"
       install_dir="$2"
       shift 2
       ;;
@@ -92,6 +111,10 @@ sha256_file() {
   fi
 }
 
+json_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
 rid="$(detect_rid)"
 asset="azimg-$rid.tar.gz"
 
@@ -130,10 +153,17 @@ trap 'rm -rf "$tmp_root"' EXIT
 
 archive_path="$tmp_root/$asset"
 sums_path="$tmp_root/SHA256SUMS"
+manifest_path="$tmp_root/azimg-release.json"
 extract_dir="$tmp_root/extract"
 
 download_file "$release_base/$asset" "$archive_path"
 download_file "$release_base/SHA256SUMS" "$sums_path"
+download_file "$release_base/azimg-release.json" "$manifest_path"
+
+installed_version="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$manifest_path" | head -n 1)"
+if [ -z "$installed_version" ]; then
+  installed_version="$release_label"
+fi
 
 expected_hash="$(grep "  $asset$" "$sums_path" | awk '{ print $1 }' | head -n 1)"
 if [ -z "$expected_hash" ]; then
@@ -160,15 +190,20 @@ fi
 cp "$source_exe" "$target"
 chmod +x "$target"
 
+escaped_target="$(json_escape "$target")"
+escaped_rid="$(json_escape "$rid")"
+escaped_version="$(json_escape "$installed_version")"
+escaped_repo="$(json_escape "$repo")"
+
 cat > "$metadata_path" <<EOF
 {
   "schemaVersion": 1,
   "install": {
     "schemaVersion": 1,
-    "installPath": "$target",
-    "rid": "$rid",
-    "installedVersion": "$release_label",
-    "sourceRepository": "$repo",
+    "installPath": "$escaped_target",
+    "rid": "$escaped_rid",
+    "installedVersion": "$escaped_version",
+    "sourceRepository": "$escaped_repo",
     "installMethod": "install.sh",
     "updatedAtUtc": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   },
@@ -181,6 +216,10 @@ EOF
 echo "Installed azimg to $target"
 case ":$PATH:" in
   *":$install_dir:"*) ;;
-  *) echo "Add $install_dir to PATH to run azimg from any shell." ;;
+  *)
+    echo "Add $install_dir to PATH to run azimg from any shell."
+    echo "For zsh or bash, add this line to your shell profile:"
+    echo "  export PATH=\"\$PATH:$install_dir\""
+    ;;
 esac
 "$target" version

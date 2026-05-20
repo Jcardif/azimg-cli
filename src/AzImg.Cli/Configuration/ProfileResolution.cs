@@ -82,7 +82,17 @@ public sealed class ProfileResolver
             throw new CliException($"The Azure endpoint '{endpointValue}' is not a valid absolute URI.", ExitCodes.Configuration);
         }
 
-        string outputDirectory = Path.GetFullPath(
+        if (!endpoint.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new CliException("The Azure endpoint must use https.", ExitCodes.Configuration);
+        }
+
+        if (endpoint.Host.Contains("your-resource", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new CliException("The Azure endpoint still contains the starter-config placeholder. Replace it with your Azure OpenAI resource endpoint.", ExitCodes.Configuration);
+        }
+
+        string outputDirectory = CliPath.GetFullPath(
             overrides.OutputDirectory
             ?? profile?.OutputDirectory
             ?? Path.Combine(Environment.CurrentDirectory, "output"));

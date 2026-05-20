@@ -5,6 +5,7 @@ using System.Net.Http.Headers;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using System.Text.Json;
 using AzImg.Cli.Commands;
 using AzImg.Cli.Runtime;
 
@@ -258,6 +259,11 @@ public sealed class UpdateService : IUpdateService
         string latestVersion = VersionUtility.NormalizeVersion(!string.IsNullOrWhiteSpace(manifest.Version) ? manifest.Version : manifest.TagName);
         string currentVersion = ApplicationVersion.Current;
         bool updateAvailable = options.Force || VersionUtility.IsNewer(latestVersion, currentVersion);
+        if (manifest.Assets is null)
+        {
+            throw new CliException($"The release manifest at '{manifestUrl}' does not contain an assets array.", ExitCodes.Io, "update_manifest_invalid");
+        }
+
         ReleaseAssetDocument? asset = manifest.Assets.FirstOrDefault(candidate => candidate.Rid.Equals(rid, StringComparison.OrdinalIgnoreCase));
 
         if ((updateAvailable || options.Force) && asset is null)
@@ -273,18 +279,19 @@ public sealed class UpdateService : IUpdateService
         string executableName = RuntimeRidDetector.GetExecutableFileName(rid);
         if (!string.IsNullOrWhiteSpace(options.InstallDirectory))
         {
-            return Path.GetFullPath(Path.Combine(options.InstallDirectory, executableName));
+            return CliPath.GetFullPath(Path.Combine(options.InstallDirectory, executableName));
         }
 
         InstallMetadataDocument metadata = await _metadataStore.LoadInstallMetadataAsync(cancellationToken);
         if (!string.IsNullOrWhiteSpace(metadata.InstallPath))
         {
-            return Path.GetFullPath(metadata.InstallPath);
+            return CliPath.GetFullPath(metadata.InstallPath);
         }
 
-        if (!string.IsNullOrWhiteSpace(Environment.ProcessPath))
+        if (!string.IsNullOrWhiteSpace(Environment.ProcessPath)
+            && Path.GetFileName(Environment.ProcessPath).Equals(executableName, StringComparison.OrdinalIgnoreCase))
         {
-            return Path.GetFullPath(Environment.ProcessPath);
+            return CliPath.GetFullPath(Environment.ProcessPath);
         }
 
         throw new CliException("Unable to determine the installed executable path. Re-run update with --install-dir <directory>.", ExitCodes.Configuration, "update_install_path_unknown");
@@ -530,9 +537,18 @@ public sealed class LocalMetadataStore
             return new LocalMetadataDocument();
         }
 
-        await using FileStream stream = File.OpenRead(_path);
-        LocalMetadataDocument metadata = await JsonDefaults.DeserializeAsync(stream, CliJsonContext.Default.LocalMetadataDocument, cancellationToken)
-            ?? new LocalMetadataDocument();
+        LocalMetadataDocument metadata;
+        try
+        {
+            await using FileStream stream = File.OpenRead(_path);
+            metadata = await JsonDefaults.DeserializeAsync(stream, CliJsonContext.Default.LocalMetadataDocument, cancellationToken)
+                ?? new LocalMetadataDocument();
+        }
+        catch (JsonException ex)
+        {
+            throw new CliException($"The local metadata file '{_path}' is not valid JSON. {ex.Message}", ExitCodes.Configuration, "metadata_invalid");
+        }
+
         metadata.Install ??= new InstallMetadataDocument();
         metadata.Update ??= new UpdateStateDocument();
         return metadata;
@@ -639,7 +655,8 @@ public sealed class UpdateArchiveExtractor
         string fullRoot = Path.GetFullPath(rootDirectory);
         string fullPath = Path.GetFullPath(Path.Combine(fullRoot, relativePath));
         string rootWithSeparator = fullRoot.EndsWith(Path.DirectorySeparatorChar) ? fullRoot : fullRoot + Path.DirectorySeparatorChar;
-        if (!fullPath.Equals(fullRoot, StringComparison.Ordinal) && !fullPath.StartsWith(rootWithSeparator, StringComparison.Ordinal))
+        StringComparison comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (!fullPath.Equals(fullRoot, comparison) && !fullPath.StartsWith(rootWithSeparator, comparison))
         {
             throw new CliException("The update archive contains an unsafe path.", ExitCodes.Io, "update_archive_path_traversal");
         }
@@ -671,17 +688,43 @@ public sealed class ExecutableReplacer
             return new ExecutableReplacementResult(Scheduled: true);
         }
 
-        string temporaryTarget = System.IO.Path.Combine(targetDirectory, $".{System.IO.Path.GetFileName(targetExecutable)}.{Guid.NewGuid():N}.tmp");
+        string executableName = System.IO.Path.GetFileName(targetExecutable);
+        string temporaryTarget = System.IO.Path.Combine(targetDirectory, $".{executableName}.{Guid.NewGuid():N}.tmp");
+        string backupPath = System.IO.Path.Combine(targetDirectory, $".{executableName}.{Guid.NewGuid():N}.backup");
         File.Copy(sourceExecutable, temporaryTarget, overwrite: true);
         File.SetUnixFileMode(temporaryTarget, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
-        File.Move(temporaryTarget, targetExecutable, overwrite: true);
-        return new ExecutableReplacementResult(Scheduled: false);
+        bool hasBackup = File.Exists(targetExecutable);
+        if (hasBackup)
+        {
+            File.Copy(targetExecutable, backupPath, overwrite: true);
+        }
+
+        try
+        {
+            File.Move(temporaryTarget, targetExecutable, overwrite: true);
+            return new ExecutableReplacementResult(Scheduled: false);
+        }
+        catch
+        {
+            if (hasBackup && File.Exists(backupPath))
+            {
+                File.Copy(backupPath, targetExecutable, overwrite: true);
+            }
+
+            throw;
+        }
+        finally
+        {
+            TryDeleteFile(temporaryTarget);
+            TryDeleteFile(backupPath);
+        }
     }
 
     private static void ScheduleWindowsReplacement(string stagedPath, string targetExecutable)
     {
         string scriptPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"azimg-update-{Guid.NewGuid():N}.cmd");
-        string script = $"@echo off{Environment.NewLine}ping 127.0.0.1 -n 3 > nul{Environment.NewLine}move /Y \"{stagedPath}\" \"{targetExecutable}\" > nul{Environment.NewLine}del \"%~f0\"{Environment.NewLine}";
+        string backupPath = $"{targetExecutable}.backup";
+        string script = $"@echo off{Environment.NewLine}ping 127.0.0.1 -n 3 > nul{Environment.NewLine}if exist \"{targetExecutable}\" copy /Y \"{targetExecutable}\" \"{backupPath}\" > nul{Environment.NewLine}move /Y \"{stagedPath}\" \"{targetExecutable}\" > nul{Environment.NewLine}if errorlevel 1 if exist \"{backupPath}\" copy /Y \"{backupPath}\" \"{targetExecutable}\" > nul{Environment.NewLine}del \"{backupPath}\" > nul 2> nul{Environment.NewLine}del \"%~f0\"{Environment.NewLine}";
         File.WriteAllText(scriptPath, script);
         ProcessStartInfo startInfo = new("cmd.exe", $"/c \"{scriptPath}\"")
         {
@@ -690,6 +733,20 @@ public sealed class ExecutableReplacer
             WindowStyle = ProcessWindowStyle.Hidden,
         };
         Process.Start(startInfo)?.Dispose();
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+        }
     }
 }
 

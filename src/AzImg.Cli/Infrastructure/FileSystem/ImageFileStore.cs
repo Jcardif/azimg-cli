@@ -38,10 +38,11 @@ public sealed class ImageFileStore
         GeneratedImageResult result,
         CancellationToken cancellationToken)
     {
-        string fullOutputDirectory = Path.GetFullPath(profile.OutputDirectory);
+        string fullOutputDirectory = CliPath.GetFullPath(profile.OutputDirectory);
         Directory.CreateDirectory(fullOutputDirectory);
 
         List<SavedImageFile> files = [];
+        HashSet<string> reservedPaths = CreatePathSet();
         string timestamp = result.CreatedAt.UtcDateTime.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture);
         string operationId = Guid.NewGuid().ToString("N")[..8];
         string slug = Slugify(prompt);
@@ -49,7 +50,7 @@ public sealed class ImageFileStore
         foreach (GeneratedImageContent image in result.Images)
         {
             string fileName = RenderTemplate(nameTemplate, timestamp, operationId, slug, image.Index, profile);
-            string path = BuildOutputPath(fullOutputDirectory, fileName, $".{image.Extension}");
+            string path = BuildUniqueOutputPath(fullOutputDirectory, fileName, $".{image.Extension}", reservedPaths);
             await WriteFileAtomicallyAsync(path, image.Content, cancellationToken);
             files.Add(new SavedImageFile(image.Index, path, ComputeSha256(image.Content), image.Content.LongLength));
         }
@@ -57,7 +58,7 @@ public sealed class ImageFileStore
         string? manifestPath = null;
         if (writeManifest)
         {
-            manifestPath = BuildOutputPath(fullOutputDirectory, RenderTemplate(nameTemplate, timestamp, operationId, slug, 0, profile), ".manifest.json");
+            manifestPath = BuildUniqueOutputPath(fullOutputDirectory, RenderTemplate(nameTemplate, timestamp, operationId, slug, 0, profile), ".manifest.json", reservedPaths);
             ImageManifestDocument manifest = new(
                 prompt,
                 "azure-openai",
@@ -83,30 +84,61 @@ public sealed class ImageFileStore
 
         Directory.CreateDirectory(directory);
         string tempPath = Path.Combine(directory, $".azimg-writing-{Guid.NewGuid():N}.tmp");
-        await File.WriteAllBytesAsync(tempPath, content, cancellationToken);
-        File.Move(tempPath, path, true);
+        try
+        {
+            await File.WriteAllBytesAsync(tempPath, content, cancellationToken);
+            File.Move(tempPath, path, overwrite: false);
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+        }
     }
 
-    private static string BuildOutputPath(string directory, string fileName, string suffix)
-        => Path.Combine(directory, CreateLeafName(fileName, suffix));
-
-    private static string CreateLeafName(string fileName, string suffix)
+    private static string BuildUniqueOutputPath(string directory, string fileName, string suffix, HashSet<string> reservedPaths)
     {
-        if (suffix.Length >= MaxOutputLeafLength)
+        string normalizedName = NormalizeBaseName(fileName);
+        string path = Path.Combine(directory, CreateLeafName(normalizedName, suffix));
+        if (reservedPaths.Add(path) && !File.Exists(path))
+        {
+            return path;
+        }
+
+        for (int attempt = 1; attempt <= 999; attempt++)
+        {
+            string disambiguator = $"-{attempt:D2}";
+            path = Path.Combine(directory, CreateLeafName(normalizedName, suffix, disambiguator));
+            if (reservedPaths.Add(path) && !File.Exists(path))
+            {
+                return path;
+            }
+        }
+
+        throw new CliException("Unable to choose a unique output file name. Use a more specific --name-template.", ExitCodes.Io);
+    }
+
+    private static string CreateLeafName(string fileName, string suffix, string disambiguator = "")
+    {
+        if (suffix.Length + disambiguator.Length >= MaxOutputLeafLength)
         {
             throw new CliException("The output file suffix is too long to save safely.", ExitCodes.Io);
         }
 
-        string normalizedName = string.IsNullOrWhiteSpace(fileName) ? "image" : fileName;
-        int maxBaseLength = MaxOutputLeafLength - suffix.Length;
+        string normalizedName = NormalizeBaseName(fileName);
+        int maxBaseLength = MaxOutputLeafLength - suffix.Length - disambiguator.Length;
         if (normalizedName.Length > maxBaseLength)
         {
-            throw new CliException(
-                "The rendered output file name is too long. Use a shorter --name-template or output directory.",
-                ExitCodes.Io);
+            normalizedName = normalizedName[..maxBaseLength].Trim('-');
+            if (normalizedName.Length == 0)
+            {
+                normalizedName = "image";
+            }
         }
 
-        return $"{normalizedName}{suffix}";
+        return $"{normalizedName}{disambiguator}{suffix}";
     }
 
     private static string RenderTemplate(string template, string timestamp, string operationId, string slug, int index, ResolvedProfile profile)
@@ -161,4 +193,10 @@ public sealed class ImageFileStore
 
         return builder.ToString();
     }
+
+    private static string NormalizeBaseName(string fileName)
+        => string.IsNullOrWhiteSpace(fileName) ? "image" : fileName;
+
+    private static HashSet<string> CreatePathSet()
+        => new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 }

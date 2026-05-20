@@ -1,14 +1,16 @@
-# 🖼️ AzImg CLI
+# AzImg CLI
 
-AzImg CLI is a non-interactive command-line tool for Azure OpenAI image generation and image editing.
+AzImg CLI is a non-interactive tool for Azure OpenAI image generation and editing.
 The executable command is `azimg`.
+
+![AzImg CLI sample output showing generated image paths and manifest path](./images/azimg-cli-banner.png)
 
 ## ✨ Key features
 
 - Non-interactive by default for agents, scripts, CI, and unattended shells.
 - Azure OpenAI image generation and image editing workflows.
 - Local config profiles for endpoint, deployment, and output directory defaults.
-- Optional manifest files with saved-image paths, checksums, usage, deployment, and timestamp metadata.
+- Optional manifests with paths, checksums, usage, deployment, and timestamps.
 
 ## 📦 Installation
 
@@ -23,18 +25,20 @@ Supported release platforms:
 ### macOS and Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Jcardif/azimg-cli/main/install.sh | bash
+curl -fsSL \
+  https://raw.githubusercontent.com/Jcardif/azimg-cli/main/install.sh | bash
 ```
 
 ### Windows PowerShell
 
 ```powershell
-iwr https://raw.githubusercontent.com/Jcardif/azimg-cli/main/install.ps1 -UseB | iex
+iwr https://raw.githubusercontent.com/Jcardif/azimg-cli/main/install.ps1 `
+  -UseB | iex
 ```
 
 ## 🔐 Authentication
 
-AzImg CLI uses the Azure CLI credential provider, no built-in token storage, that is delegated to the Azure CLI.
+AzImg CLI uses `AzureCliCredential`; token storage is delegated to Azure CLI.
 
 ```bash
 # Login via Azure CLI first
@@ -44,74 +48,47 @@ az login
 azimg doctor --verify-auth
 ```
 
-The authenticated identity must be authorized on the Azure OpenAI resource with the role `Cognitive Services OpenAI User` assigned.
+The authenticated identity needs the `Cognitive Services OpenAI User` role.
+Assign it on the Azure OpenAI resource.
 
 To assign the role via Azure CLI:
 
 ```bash
+resource_id="/subscriptions/<sub>/resourceGroups/<rg>"
+resource_id="$resource_id/providers/Microsoft.CognitiveServices"
+resource_id="$resource_id/accounts/<resource>"
+
 az role assignment create \
   --assignee "<your-user-or-service-principal>" \
   --role "Cognitive Services OpenAI User" \
-  --scope "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<resource>"
+  --scope "$resource_id"
 ```
 
-## 🚀 Usage examples
+## 🚀 Usage example
 
-Generate one image and write a manifest:
+Generate the `azimg-cli` repository banner:
 
 ```bash
-azimg generate "A watercolor robot painting clouds" \
+azimg generate \
+  "Generate a banner image 16:9 for a repo for azimg-cli, a command-line tool that generates images with Azure OpenAI." \
   --profile azure-default \
   --count 1 \
-  --write-manifest
-```
-
-Generate multiple transparent PNG images into a specific directory:
-
-```bash
-azimg generate "Minimal app icon for an image CLI" \
-  --count 3 \
-  --background transparent \
+  --size 1536x864 \
+  --quality high \
+  --background opaque \
   --output-format png \
-  --output-directory ./out
+  --output-directory ./output/banner \
+  --name-template azimg-cli-banner \
+  --write-manifest \
+  --format text
 ```
 
-Edit an existing image:
-
-```bash
-azimg edit input.png "Make the background transparent" --profile azure-default
-```
-
-Edit an image with a PNG mask:
-
-```bash
-azimg edit input.png "Replace the sky with sunset clouds" \
-  --mask-file mask.png \
-  --profile azure-default
-```
-
-Check for an update:
-
-```bash
-azimg update check
-```
-
-Install the latest update:
-
-```bash
-azimg update
-```
-
-Preview an update without changing files:
-
-```bash
-azimg update --dry-run
-```
+This writes the banner image and manifest to `./output/banner`.
 
 ## ⚙️ Configuration and common settings
 
 The default configuration file is `~/.azimg/config.json`.
-Create a starter config with `azimg config init --force`, then edit the endpoint and deployment values.
+Run `azimg config init --force`, then edit endpoint and deployment.
 
 ```json
 {
@@ -129,25 +106,78 @@ Create a starter config with `azimg config init --force`, then edit the endpoint
 
 ## 📚 Command reference
 
-Command responses are JSON by default. Add `--format text` when you want human-readable output.
+Command responses are JSON by default.
+Add `--format text` when you want human-readable output.
 
-| Command | What it does | Inputs and options |
+Run `azimg <command> --help` for the canonical help text.
+Commands below omit the leading `azimg` unless the command is global.
+
+| Command | Purpose | Required input |
 | --- | --- | --- |
-| `azimg --help` | Shows top-level help. | No required input. |
-| `azimg <COMMAND> --help` | Shows help for one command. | Works with `generate`, `edit`, `doctor`, `config`, `update`, and `version`. |
-| `azimg generate <PROMPT>` | Generates one or more images from a text prompt. | Required: `<PROMPT>`. Profile/options: `-p, --profile <NAME>`, `--config <PATH>`, `--deployment <NAME>`, `--endpoint <URL>`, `-o, --output-directory <PATH>`. Image/options: `--count <N>`, `--size <WIDTHxHEIGHT>`, `--quality <auto/low/medium/high>`, `--background <auto/opaque/transparent>`, `--output-format <png/jpeg/webp>`, `--output-compression <0-100>`, `--end-user-id <ID>`. File/options: `--name-template <TEMPLATE>`, `--write-manifest`. Output/options: `--format <json/text>`. |
-| `azimg edit <INPUT_FILE> <PROMPT>` | Edits an existing image, optionally with a mask. | Required: `<INPUT_FILE>` and `<PROMPT>`. Edit/options: `--mask-file <PATH>`. Profile/options: `-p, --profile <NAME>`, `--config <PATH>`, `--deployment <NAME>`, `--endpoint <URL>`, `-o, --output-directory <PATH>`. Image/options: `--count <N>`, `--size <WIDTHxHEIGHT>`, `--quality <auto/low/medium/high>`, `--background <auto/opaque/transparent>`, `--output-format <png/jpeg/webp>`, `--output-compression <0-100>`, `--end-user-id <ID>`. File/options: `--name-template <TEMPLATE>`, `--write-manifest`. Output/options: `--format <json/text>`. |
-| `azimg doctor` | Checks config, profile resolution, endpoint shape, output directory access, and optionally Azure CLI auth. | Profile/options: `-p, --profile <NAME>`, `--config <PATH>`, `--deployment <NAME>`, `--endpoint <URL>`, `-o, --output-directory <PATH>`. Auth/options: `--verify-auth`. Output/options: `--format <json/text>`. |
-| `azimg config show` | Prints the resolved config file and configured profiles. | Options: `--path <PATH>`, `--format <json/text>`. This is also the default `config` action when no action is provided. |
-| `azimg config init` | Writes a starter config file. | Options: `--path <PATH>`, `--force`, `--format <json/text>`. |
-| `azimg config set-default-profile --profile <NAME>` | Changes the default profile in the config file. | Required: `--profile <NAME>`. Options: `--path <PATH>`, `--format <json/text>`. The action can also be supplied as `--action set-default-profile`. |
-| `azimg update check` | Checks whether a newer release is available. | Options: `--version <TAG>`, `--manifest-url <URL>`, `--install-dir <PATH>`, `--force`, `--format <json/text>`. |
-| `azimg update` | Installs the selected release; equivalent to `azimg update apply`. | Options: `--version <TAG>`, `--manifest-url <URL>`, `--install-dir <PATH>`, `--dry-run`, `--force`, `--format <json/text>`. The apply action can also be written as `azimg update apply` or `azimg update install`. |
-| `azimg version` | Prints version information. | Options: `--format <json/text>`. |
+| `--help` | Show top-level help. | None. |
+| `<command> --help` | Show command help. | Command name. |
+| `generate <PROMPT>` | Generate images from text. | One quoted prompt. |
+| `edit <FILE> <PROMPT>` | Edit an image. | File and prompt. |
+| `doctor` | Validate config and output setup. | None. |
+| `config` or `config show` | Print the current config. | None. |
+| `config init` | Create a starter config. | None. |
+| `config set-default-profile` | Set default profile. | `--profile <NAME>` |
+| `update check` | Check for a newer release. | None. |
+| `update` or `update apply` | Install the selected release. | None. |
+| `version` | Print version information. | None. |
+
+### Profile and Azure options
+
+Use these with `generate`, `edit`, and `doctor` to override a config profile.
+
+- `-p, --profile <NAME>`: Use a named profile from the config file.
+- `--config <PATH>`: Read a config file other than `~/.azimg/config.json`.
+- `--deployment <NAME>`: Override the Azure OpenAI deployment name.
+- `--endpoint <URL>`: Override the Azure OpenAI endpoint.
+- `-o, --output-directory <PATH>`: Override where generated files are written.
+
+### Image generation and edit options
+
+Use these with `generate` and `edit`.
+
+- `--count <N>`: Number of images to create, from `1` to `10`.
+- `--size <WIDTHxHEIGHT>`: Image size, such as `1024x1024`.
+- `--quality <auto|low|medium|high>`: Requested image quality.
+- `--background <auto|opaque|transparent>`: Requested background mode.
+- `--output-format <png|jpeg|webp>`: Saved image format.
+- `--output-compression <0-100>`: Compression level for supported formats.
+- `--end-user-id <ID>`: Optional user identifier passed to the service.
+- `--name-template <TEMPLATE>`: File name template.
+- Tokens: `{timestamp}`, `{id}`, `{slug}`, `{index}`, and `{profile}`.
+- `--write-manifest`: Write a manifest JSON file beside the images.
+- `--mask-file <PATH>`: PNG mask for `edit` only.
+
+### Config options
+
+- `config` defaults to `config show`.
+- `config init --force` overwrites an existing config file.
+- `config set-default-profile --profile <NAME>` changes the default profile.
+- `--path <PATH>` reads or writes a specific config file.
+- `--action <ACTION>` selects the action by option instead of position.
+
+### Update options
+
+- `update` defaults to `update apply`.
+- `update install` is an alias for `update apply`.
+- `--version <TAG>` selects a specific release instead of the latest release.
+- `--install-dir <PATH>` selects the directory that contains `azimg`.
+- `--manifest-url <URL>` uses an explicit release manifest.
+- `--dry-run` previews update work without changing files.
+- `--force` reinstalls even when the selected release is already current.
+
+### Output formatting
+
+- `--format json` is the default for structured command output.
+- `--format text` prints human-readable output.
 
 ## 🧑‍💻 Development
 
-Start from a fresh clone, restore dependencies, build, run tests, and smoke-test the local CLI:
+For development, restore dependencies, build, test, and smoke-test the CLI:
 
 ```bash
 git clone https://github.com/Jcardif/azimg-cli.git

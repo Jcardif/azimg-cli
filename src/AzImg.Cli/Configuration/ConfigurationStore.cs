@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AzImg.Cli.Runtime;
 
 namespace AzImg.Cli.Configuration;
@@ -32,11 +33,30 @@ public sealed class ConfigurationStore
             return (path, null);
         }
 
-        await using FileStream stream = File.OpenRead(path);
-        AppConfig? config = await JsonDefaults.DeserializeAsync(stream, CliJsonContext.Default.AppConfig, cancellationToken);
+        AppConfig? config;
+        try
+        {
+            await using FileStream stream = File.OpenRead(path);
+            config = await JsonDefaults.DeserializeAsync(stream, CliJsonContext.Default.AppConfig, cancellationToken);
+        }
+        catch (JsonException ex)
+        {
+            throw new CliException($"The configuration file '{path}' is not valid JSON. {ex.Message}", ExitCodes.Configuration);
+        }
+
         if (config is null)
         {
             throw new CliException($"The configuration file '{path}' is empty or invalid.", ExitCodes.Configuration);
+        }
+
+        if (config.SchemaVersion != 1)
+        {
+            throw new CliException($"The configuration file '{path}' uses unsupported schemaVersion {config.SchemaVersion}.", ExitCodes.Configuration);
+        }
+
+        if (config.Profiles is null)
+        {
+            throw new CliException($"The configuration file '{path}' must contain a profiles object.", ExitCodes.Configuration);
         }
 
         config.Profiles = new Dictionary<string, ProfileConfig>(config.Profiles, StringComparer.OrdinalIgnoreCase);
@@ -102,7 +122,7 @@ public sealed class ConfigurationStore
     {
         if (!string.IsNullOrWhiteSpace(explicitPath))
         {
-            return Path.GetFullPath(explicitPath);
+            return CliPath.GetFullPath(explicitPath);
         }
 
         return GetDefaultPath();
@@ -110,7 +130,6 @@ public sealed class ConfigurationStore
 
     private static string GetHomeDirectory()
     {
-        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return string.IsNullOrWhiteSpace(home) ? AppContext.BaseDirectory : home;
+        return CliPath.GetHomeDirectory();
     }
 }

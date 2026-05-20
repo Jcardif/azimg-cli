@@ -20,7 +20,7 @@ public sealed class CommandDispatcher
     private readonly ConfigurationStore _configurationStore;
     private readonly ProfileResolver _profileResolver;
     private readonly GeneratedImageRequestValidator _validator;
-    private readonly AzureOpenAIImageClient _imageClient;
+    private readonly IGeneratedImageClient _imageClient;
     private readonly ImageFileStore _imageFileStore;
     private readonly DiagnosticService _diagnosticService;
     private readonly HelpTextProvider _helpText;
@@ -33,7 +33,7 @@ public sealed class CommandDispatcher
         ConfigurationStore configurationStore,
         ProfileResolver profileResolver,
         GeneratedImageRequestValidator validator,
-        AzureOpenAIImageClient imageClient,
+        IGeneratedImageClient imageClient,
         ImageFileStore imageFileStore,
         DiagnosticService diagnosticService,
         HelpTextProvider helpText,
@@ -82,7 +82,7 @@ public sealed class CommandDispatcher
 
     private async Task<int> RunGenerateAsync(string[] args, CancellationToken cancellationToken)
     {
-        ParsedArguments parsed = CommandLineParser.Parse(args, CreateProfileAliases());
+        ParsedArguments parsed = CommandLineParser.Parse(args, CreateProfileAliases(), CreateImageValueOptions(), CreateGenerateFlagOptions());
 
         if (parsed.GetFlag("help"))
         {
@@ -90,7 +90,9 @@ public sealed class CommandDispatcher
             return ExitCodes.Success;
         }
 
+        bool json = parsed.RequestsJsonOutput();
         string prompt = parsed.GetRequiredPositional(0, "generate requires a prompt.");
+        parsed.ThrowIfExtraPositionals(1, "generate accepts exactly one prompt. Quote multi-word prompts as a single argument.");
         int count = parsed.GetInt32("count", 1);
         int? outputCompression = parsed.GetOptionalInt32("output-compression");
         GenerateImageRequest request = new(
@@ -112,7 +114,13 @@ public sealed class CommandDispatcher
             config,
             new ProfileOverrides(parsed.Get("profile"), parsed.Get("deployment"), parsed.Get("endpoint"), parsed.Get("output-directory")));
 
+        await using OperationProgress progress = OperationProgress.Start(
+            Console.Error,
+            $"Generating {FormatImageCount(request.Count)} with deployment '{profile.DeploymentName}'. This can take a few minutes.",
+            $"Still generating {FormatImageCount(request.Count)}; waiting for Azure OpenAI.");
+
         GeneratedImageResult result = await _imageClient.GenerateAsync(profile, request, cancellationToken);
+        progress.Report($"Generation response received; saving {FormatImageCount(result.Images.Count)}.");
         SaveImagesResult saveResult = await _imageFileStore.SaveAsync(
             profile,
             prompt,
@@ -120,8 +128,9 @@ public sealed class CommandDispatcher
             request.WriteManifest,
             result,
             cancellationToken);
+        progress.Complete($"Generation complete; saved {FormatFileCount(saveResult.Files.Count)}.");
 
-        if (parsed.RequestsJsonOutput())
+        if (json)
         {
             ImageCommandResultDocument document = new(
                 configPath,
@@ -149,7 +158,7 @@ public sealed class CommandDispatcher
 
     private async Task<int> RunEditAsync(string[] args, CancellationToken cancellationToken)
     {
-        ParsedArguments parsed = CommandLineParser.Parse(args, CreateProfileAliases());
+        ParsedArguments parsed = CommandLineParser.Parse(args, CreateProfileAliases(), CreateEditValueOptions(), CreateGenerateFlagOptions());
 
         if (parsed.GetFlag("help"))
         {
@@ -157,13 +166,15 @@ public sealed class CommandDispatcher
             return ExitCodes.Success;
         }
 
+        bool json = parsed.RequestsJsonOutput();
         string inputFile = parsed.GetRequiredPositional(0, "edit requires an input image path.");
         string prompt = parsed.GetRequiredPositional(1, "edit requires a prompt.");
+        parsed.ThrowIfExtraPositionals(2, "edit accepts exactly an input image path and one prompt. Quote multi-word prompts as a single argument.");
         int count = parsed.GetInt32("count", 1);
         int? outputCompression = parsed.GetOptionalInt32("output-compression");
         EditImageRequest request = new(
-            Path.GetFullPath(inputFile),
-            parsed.Get("mask-file") is { Length: > 0 } maskFile ? Path.GetFullPath(maskFile) : null,
+            CliPath.GetFullPath(inputFile),
+            parsed.Get("mask-file") is { Length: > 0 } maskFile ? CliPath.GetFullPath(maskFile) : null,
             prompt,
             count,
             parsed.Get("size"),
@@ -182,7 +193,13 @@ public sealed class CommandDispatcher
             config,
             new ProfileOverrides(parsed.Get("profile"), parsed.Get("deployment"), parsed.Get("endpoint"), parsed.Get("output-directory")));
 
+        await using OperationProgress progress = OperationProgress.Start(
+            Console.Error,
+            $"Editing {FormatImageCount(request.Count)} with deployment '{profile.DeploymentName}'. This can take a few minutes.",
+            $"Still editing {FormatImageCount(request.Count)}; waiting for Azure OpenAI.");
+
         GeneratedImageResult result = await _imageClient.EditAsync(profile, request, cancellationToken);
+        progress.Report($"Edit response received; saving {FormatImageCount(result.Images.Count)}.");
         SaveImagesResult saveResult = await _imageFileStore.SaveAsync(
             profile,
             prompt,
@@ -190,8 +207,9 @@ public sealed class CommandDispatcher
             request.WriteManifest,
             result,
             cancellationToken);
+        progress.Complete($"Edit complete; saved {FormatFileCount(saveResult.Files.Count)}.");
 
-        if (parsed.RequestsJsonOutput())
+        if (json)
         {
             ImageCommandResultDocument document = new(
                 configPath,
@@ -219,7 +237,7 @@ public sealed class CommandDispatcher
 
     private async Task<int> RunDoctorAsync(string[] args, CancellationToken cancellationToken)
     {
-        ParsedArguments parsed = CommandLineParser.Parse(args, CreateProfileAliases());
+        ParsedArguments parsed = CommandLineParser.Parse(args, CreateProfileAliases(), CreateDoctorValueOptions(), CreateDoctorFlagOptions());
 
         if (parsed.GetFlag("help"))
         {
@@ -227,13 +245,15 @@ public sealed class CommandDispatcher
             return ExitCodes.Success;
         }
 
+        bool json = parsed.RequestsJsonOutput();
+        parsed.ThrowIfExtraPositionals(0, "doctor does not accept positional arguments.");
         (string configPath, AppConfig? config) = await _configurationStore.LoadAsync(parsed.Get("config"), cancellationToken);
         ResolvedProfile profile = _profileResolver.Resolve(
             config,
             new ProfileOverrides(parsed.Get("profile"), parsed.Get("deployment"), parsed.Get("endpoint"), parsed.Get("output-directory")));
 
         DiagnosticReport report = await _diagnosticService.RunAsync(configPath, config, profile, parsed.GetFlag("verify-auth"), cancellationToken);
-        if (parsed.RequestsJsonOutput())
+        if (json)
         {
             DiagnosticReportDocument document = new(report.ConfigPath, report.ProfileName, report.Checks.ToArray(), report.IsHealthy);
             Console.WriteLine(JsonDefaults.Serialize(document, CliJsonContext.Default.DiagnosticReportDocument));
@@ -257,7 +277,7 @@ public sealed class CommandDispatcher
         {
             ["h"] = "help",
             ["?"] = "help",
-        });
+        }, CreateConfigValueOptions(), CreateConfigFlagOptions());
 
         if (parsed.GetFlag("help"))
         {
@@ -265,7 +285,9 @@ public sealed class CommandDispatcher
             return ExitCodes.Success;
         }
 
-        string action = (parsed.Get("action") ?? parsed.GetPositionalOrDefault(0) ?? "show").Trim();
+        string? actionOption = parsed.Get("action");
+        parsed.ThrowIfExtraPositionals(actionOption is null ? 1 : 0, "config accepts at most one action positional argument.");
+        string action = (actionOption ?? parsed.GetPositionalOrDefault(0) ?? "show").Trim();
         string? path = parsed.Get("path");
         bool json = parsed.RequestsJsonOutput();
 
@@ -295,7 +317,7 @@ public sealed class CommandDispatcher
         {
             AppConfig sample = _configurationStore.CreateSampleConfig();
             await _configurationStore.SaveAsync(sample, path, parsed.GetFlag("force"), cancellationToken);
-            string configPath = path is null ? _configurationStore.GetDefaultPath() : Path.GetFullPath(path);
+            string configPath = path is null ? _configurationStore.GetDefaultPath() : CliPath.GetFullPath(path);
             if (json)
             {
                 ConfigInitDocument document = new(configPath, sample.DefaultProfile, sample.Profiles.Keys.ToArray());
@@ -351,7 +373,7 @@ public sealed class CommandDispatcher
         {
             ["h"] = "help",
             ["?"] = "help",
-        });
+        }, CreateStructuredValueOptions(), CreateHelpFlagOptions());
 
         if (parsed.GetFlag("help"))
         {
@@ -359,6 +381,7 @@ public sealed class CommandDispatcher
             return ExitCodes.Success;
         }
 
+        parsed.ThrowIfExtraPositionals(0, "version does not accept positional arguments.");
         string version = ApplicationVersion.Current;
         if (parsed.RequestsJsonOutput())
         {
@@ -377,7 +400,7 @@ public sealed class CommandDispatcher
         {
             ["h"] = "help",
             ["?"] = "help",
-        });
+        }, CreateUpdateValueOptions(), CreateUpdateFlagOptions());
 
         if (parsed.GetFlag("help"))
         {
@@ -385,7 +408,9 @@ public sealed class CommandDispatcher
             return ExitCodes.Success;
         }
 
-        string action = (parsed.Get("action") ?? parsed.GetPositionalOrDefault(0) ?? "apply").Trim();
+        string? actionOption = parsed.Get("action");
+        parsed.ThrowIfExtraPositionals(actionOption is null ? 1 : 0, "update accepts at most one action positional argument.");
+        string action = (actionOption ?? parsed.GetPositionalOrDefault(0) ?? "apply").Trim();
         bool json = parsed.RequestsJsonOutput();
         UpdateCommandOptions options = new(
             parsed.Get("version"),
@@ -440,6 +465,12 @@ public sealed class CommandDispatcher
         Console.WriteLine(document.Message);
     }
 
+    private static string FormatImageCount(int count)
+        => count == 1 ? "1 image" : $"{count} images";
+
+    private static string FormatFileCount(int count)
+        => count == 1 ? "1 file" : $"{count} files";
+
     private static Dictionary<string, string> CreateProfileAliases()
         => new(StringComparer.OrdinalIgnoreCase)
         {
@@ -448,6 +479,106 @@ public sealed class CommandDispatcher
             ["h"] = "help",
             ["?"] = "help",
         };
+
+    private static HashSet<string> CreateStructuredValueOptions()
+        => new(StringComparer.OrdinalIgnoreCase)
+        {
+            "format",
+        };
+
+    private static HashSet<string> CreateProfileValueOptions()
+        => new(StringComparer.OrdinalIgnoreCase)
+        {
+            "profile",
+            "config",
+            "deployment",
+            "endpoint",
+            "output-directory",
+        };
+
+    private static HashSet<string> CreateImageValueOptions()
+    {
+        HashSet<string> options = CreateProfileValueOptions();
+        options.Add("count");
+        options.Add("size");
+        options.Add("quality");
+        options.Add("background");
+        options.Add("output-format");
+        options.Add("output-compression");
+        options.Add("end-user-id");
+        options.Add("name-template");
+        options.Add("format");
+        return options;
+    }
+
+    private static HashSet<string> CreateEditValueOptions()
+    {
+        HashSet<string> options = CreateImageValueOptions();
+        options.Add("mask-file");
+        return options;
+    }
+
+    private static HashSet<string> CreateDoctorValueOptions()
+    {
+        HashSet<string> options = CreateProfileValueOptions();
+        options.Add("format");
+        return options;
+    }
+
+    private static HashSet<string> CreateConfigValueOptions()
+        => new(StringComparer.OrdinalIgnoreCase)
+        {
+            "action",
+            "path",
+            "profile",
+            "format",
+        };
+
+    private static HashSet<string> CreateUpdateValueOptions()
+        => new(StringComparer.OrdinalIgnoreCase)
+        {
+            "action",
+            "version",
+            "manifest-url",
+            "install-dir",
+            "format",
+        };
+
+    private static HashSet<string> CreateHelpFlagOptions()
+        => new(StringComparer.OrdinalIgnoreCase)
+        {
+            "help",
+            "json",
+        };
+
+    private static HashSet<string> CreateGenerateFlagOptions()
+    {
+        HashSet<string> options = CreateHelpFlagOptions();
+        options.Add("write-manifest");
+        return options;
+    }
+
+    private static HashSet<string> CreateDoctorFlagOptions()
+    {
+        HashSet<string> options = CreateHelpFlagOptions();
+        options.Add("verify-auth");
+        return options;
+    }
+
+    private static HashSet<string> CreateConfigFlagOptions()
+    {
+        HashSet<string> options = CreateHelpFlagOptions();
+        options.Add("force");
+        return options;
+    }
+
+    private static HashSet<string> CreateUpdateFlagOptions()
+    {
+        HashSet<string> options = CreateHelpFlagOptions();
+        options.Add("dry-run");
+        options.Add("force");
+        return options;
+    }
 
     private static bool IsHelpToken(string value)
         => value.Equals("--help", StringComparison.Ordinal)
