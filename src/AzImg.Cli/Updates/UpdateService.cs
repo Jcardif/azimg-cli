@@ -666,49 +666,66 @@ public sealed class UpdateArchiveExtractor
 }
 
 /// <summary>
-/// Replaces the installed executable, using a deferred helper on Windows when the file is running.
+/// Replaces the installed executable, deferring replacement when the target is the running process.
 /// </summary>
 public sealed class ExecutableReplacer
 {
+    private readonly string? _currentProcessPath;
+    private readonly int _currentProcessId;
+    private readonly IExecutableReplacementScheduler _replacementScheduler;
+
+    /// <summary>Initializes an executable replacer for the current process.</summary>
+    public ExecutableReplacer()
+        : this(Environment.ProcessPath, Environment.ProcessId, new ExecutableReplacementScheduler())
+    {
+    }
+
+    internal ExecutableReplacer(string? currentProcessPath, int currentProcessId, IExecutableReplacementScheduler replacementScheduler)
+    {
+        _currentProcessPath = currentProcessPath;
+        _currentProcessId = currentProcessId;
+        _replacementScheduler = replacementScheduler;
+    }
+
     /// <summary>Replaces or schedules replacement of the installed executable.</summary>
     public ExecutableReplacementResult Replace(string sourceExecutable, string targetExecutable)
     {
-        string? targetDirectory = Path.GetDirectoryName(targetExecutable);
+        string replacementTarget = ResolveExecutablePath(targetExecutable);
+        string? targetDirectory = Path.GetDirectoryName(replacementTarget);
         if (string.IsNullOrWhiteSpace(targetDirectory))
         {
-            throw new CliException($"The update target path '{targetExecutable}' is invalid.", ExitCodes.Configuration, "update_target_invalid");
+            throw new CliException($"The update target path '{replacementTarget}' is invalid.", ExitCodes.Configuration, "update_target_invalid");
         }
 
         Directory.CreateDirectory(targetDirectory);
-        if (OperatingSystem.IsWindows())
+        if (OperatingSystem.IsWindows() || IsCurrentProcessExecutable(replacementTarget, _currentProcessPath))
         {
-            string stagedPath = System.IO.Path.Combine(targetDirectory, $"{System.IO.Path.GetFileName(targetExecutable)}.new");
-            File.Copy(sourceExecutable, stagedPath, overwrite: true);
-            ScheduleWindowsReplacement(stagedPath, targetExecutable);
+            string stagedPath = StageReplacementExecutable(sourceExecutable, targetDirectory, replacementTarget);
+            _replacementScheduler.ScheduleReplacement(stagedPath, replacementTarget, _currentProcessId);
             return new ExecutableReplacementResult(Scheduled: true);
         }
 
-        string executableName = System.IO.Path.GetFileName(targetExecutable);
+        string executableName = System.IO.Path.GetFileName(replacementTarget);
         string temporaryTarget = System.IO.Path.Combine(targetDirectory, $".{executableName}.{Guid.NewGuid():N}.tmp");
         string backupPath = System.IO.Path.Combine(targetDirectory, $".{executableName}.{Guid.NewGuid():N}.backup");
         File.Copy(sourceExecutable, temporaryTarget, overwrite: true);
         File.SetUnixFileMode(temporaryTarget, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
-        bool hasBackup = File.Exists(targetExecutable);
+        bool hasBackup = File.Exists(replacementTarget);
         if (hasBackup)
         {
-            File.Copy(targetExecutable, backupPath, overwrite: true);
+            File.Copy(replacementTarget, backupPath, overwrite: true);
         }
 
         try
         {
-            File.Move(temporaryTarget, targetExecutable, overwrite: true);
+            File.Move(temporaryTarget, replacementTarget, overwrite: true);
             return new ExecutableReplacementResult(Scheduled: false);
         }
         catch
         {
             if (hasBackup && File.Exists(backupPath))
             {
-                File.Copy(backupPath, targetExecutable, overwrite: true);
+                File.Copy(backupPath, replacementTarget, overwrite: true);
             }
 
             throw;
@@ -720,19 +737,48 @@ public sealed class ExecutableReplacer
         }
     }
 
-    private static void ScheduleWindowsReplacement(string stagedPath, string targetExecutable)
+    internal static bool IsCurrentProcessExecutable(string targetExecutable, string? currentProcessPath)
     {
-        string scriptPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"azimg-update-{Guid.NewGuid():N}.cmd");
-        string backupPath = $"{targetExecutable}.backup";
-        string script = $"@echo off{Environment.NewLine}ping 127.0.0.1 -n 3 > nul{Environment.NewLine}if exist \"{targetExecutable}\" copy /Y \"{targetExecutable}\" \"{backupPath}\" > nul{Environment.NewLine}move /Y \"{stagedPath}\" \"{targetExecutable}\" > nul{Environment.NewLine}if errorlevel 1 if exist \"{backupPath}\" copy /Y \"{backupPath}\" \"{targetExecutable}\" > nul{Environment.NewLine}del \"{backupPath}\" > nul 2> nul{Environment.NewLine}del \"%~f0\"{Environment.NewLine}";
-        File.WriteAllText(scriptPath, script);
-        ProcessStartInfo startInfo = new("cmd.exe", $"/c \"{scriptPath}\"")
+        if (string.IsNullOrWhiteSpace(currentProcessPath))
         {
-            CreateNoWindow = true,
-            UseShellExecute = false,
-            WindowStyle = ProcessWindowStyle.Hidden,
-        };
-        Process.Start(startInfo)?.Dispose();
+            return false;
+        }
+
+        string target = ResolveExecutablePath(targetExecutable);
+        string current = ResolveExecutablePath(currentProcessPath);
+        StringComparison comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        return target.Equals(current, comparison);
+    }
+
+    internal static string ResolveExecutablePath(string path)
+    {
+        string fullPath = System.IO.Path.GetFullPath(path);
+        try
+        {
+            FileSystemInfo? target = File.ResolveLinkTarget(fullPath, returnFinalTarget: true);
+            return target?.FullName ?? fullPath;
+        }
+        catch (IOException)
+        {
+            return fullPath;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return fullPath;
+        }
+    }
+
+    private static string StageReplacementExecutable(string sourceExecutable, string targetDirectory, string targetExecutable)
+    {
+        string executableName = System.IO.Path.GetFileName(targetExecutable);
+        string stagedPath = System.IO.Path.Combine(targetDirectory, $".{executableName}.{Guid.NewGuid():N}.new");
+        File.Copy(sourceExecutable, stagedPath, overwrite: true);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(stagedPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+        }
+
+        return stagedPath;
     }
 
     private static void TryDeleteFile(string path)
@@ -747,6 +793,117 @@ public sealed class ExecutableReplacer
         catch
         {
         }
+    }
+}
+
+internal interface IExecutableReplacementScheduler
+{
+    void ScheduleReplacement(string stagedPath, string targetExecutable, int currentProcessId);
+}
+
+internal sealed class ExecutableReplacementScheduler : IExecutableReplacementScheduler
+{
+    public void ScheduleReplacement(string stagedPath, string targetExecutable, int currentProcessId)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            ScheduleWindowsReplacement(stagedPath, targetExecutable, currentProcessId);
+            return;
+        }
+
+        ScheduleUnixReplacement(stagedPath, targetExecutable, currentProcessId);
+    }
+
+    private static void ScheduleWindowsReplacement(string stagedPath, string targetExecutable, int currentProcessId)
+    {
+        string scriptPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"azimg-update-{Guid.NewGuid():N}.cmd");
+        string script = string.Join(
+            Environment.NewLine,
+            "@echo off",
+            "setlocal",
+            "set \"parent_pid=%AZIMG_UPDATE_PID%\"",
+            "set \"staged_path=%AZIMG_UPDATE_STAGED%\"",
+            "set \"target_path=%AZIMG_UPDATE_TARGET%\"",
+            "set \"backup_path=%target_path%.backup\"",
+            ":wait_for_parent",
+            "tasklist /FI \"PID eq %parent_pid%\" 2>NUL | findstr /R /C:\" %parent_pid% \" >NUL",
+            "if not errorlevel 1 (",
+            "  timeout /T 1 /NOBREAK >NUL",
+            "  goto wait_for_parent",
+            ")",
+            "if exist \"%target_path%\" copy /Y \"%target_path%\" \"%backup_path%\" >NUL",
+            "move /Y \"%staged_path%\" \"%target_path%\" >NUL",
+            "if not errorlevel 1 (",
+            "  del \"%backup_path%\" >NUL 2>NUL",
+            "  del \"%~f0\" >NUL 2>NUL",
+            "  exit /B 0",
+            ")",
+            "if exist \"%backup_path%\" copy /Y \"%backup_path%\" \"%target_path%\" >NUL",
+            "del \"%staged_path%\" >NUL 2>NUL",
+            "del \"%~f0\" >NUL 2>NUL",
+            "exit /B 1",
+            string.Empty);
+        File.WriteAllText(scriptPath, script);
+        ProcessStartInfo startInfo = new("cmd.exe")
+        {
+            Arguments = CreateWindowsReplacementArguments(scriptPath),
+            CreateNoWindow = true,
+            UseShellExecute = false,
+            WindowStyle = ProcessWindowStyle.Hidden,
+        };
+        startInfo.Environment["AZIMG_UPDATE_PID"] = currentProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        startInfo.Environment["AZIMG_UPDATE_STAGED"] = stagedPath;
+        startInfo.Environment["AZIMG_UPDATE_TARGET"] = targetExecutable;
+        Process.Start(startInfo)?.Dispose();
+    }
+
+    internal static string CreateWindowsReplacementArguments(string scriptPath)
+        => $"/d /s /c \"\"{scriptPath}\"\"";
+
+    private static void ScheduleUnixReplacement(string stagedPath, string targetExecutable, int currentProcessId)
+    {
+        string scriptPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"azimg-update-{Guid.NewGuid():N}.sh");
+        string script = string.Join(
+            Environment.NewLine,
+            "#!/bin/sh",
+            "set -u",
+            "parent_pid=\"$1\"",
+            "staged_path=\"$2\"",
+            "target_path=\"$3\"",
+            "backup_path=\"${target_path}.backup\"",
+            "while kill -0 \"$parent_pid\" 2>/dev/null; do",
+            "  sleep 0.2",
+            "done",
+            "if [ -f \"$target_path\" ]; then",
+            "  cp -p \"$target_path\" \"$backup_path\" 2>/dev/null || true",
+            "fi",
+            "if mv -f \"$staged_path\" \"$target_path\"; then",
+            "  chmod 755 \"$target_path\" 2>/dev/null || true",
+            "  rm -f \"$backup_path\" \"$0\"",
+            "  exit 0",
+            "fi",
+            "if [ -f \"$backup_path\" ]; then",
+            "  cp -p \"$backup_path\" \"$target_path\" 2>/dev/null || true",
+            "fi",
+            "rm -f \"$staged_path\" \"$0\"",
+            "exit 1",
+            string.Empty);
+        File.WriteAllText(scriptPath, script);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(scriptPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        ProcessStartInfo startInfo = new("/bin/sh")
+        {
+            CreateNoWindow = true,
+            UseShellExecute = false,
+        };
+        startInfo.ArgumentList.Add(scriptPath);
+        startInfo.ArgumentList.Add(currentProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        startInfo.ArgumentList.Add(stagedPath);
+        startInfo.ArgumentList.Add(targetExecutable);
+        Process.Start(startInfo)?.Dispose();
     }
 }
 

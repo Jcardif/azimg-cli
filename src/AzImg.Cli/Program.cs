@@ -61,9 +61,40 @@ static void WriteError(string[] args, string message, int exitCode, string error
     if (CommandOutputPreferences.RequestsJson(args))
     {
         CliErrorDocument document = new(new CliErrorInfo(errorCode, message, exitCode));
-        Console.Error.WriteLine(JsonDefaults.Serialize(document, CliJsonContext.Default.CliErrorDocument));
+        try
+        {
+            Console.Error.WriteLine(JsonDefaults.Serialize(document, CliJsonContext.Default.CliErrorDocument));
+        }
+        catch (Exception ex) when (IsAssemblyLoadFailure(ex))
+        {
+            Console.Error.WriteLine(CreateFallbackJsonError(errorCode, message, exitCode));
+        }
+
         return;
     }
 
     Console.Error.WriteLine(message);
 }
+
+static string CreateFallbackJsonError(string errorCode, string message, int exitCode)
+    => "{\"error\":{\"code\":\""
+        + EscapeJsonString(errorCode)
+        + "\",\"message\":\""
+        + EscapeJsonString(message)
+        + "\",\"exitCode\":"
+        + exitCode.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        + "}}";
+
+static string EscapeJsonString(string value)
+{
+    return value
+        .Replace("\\", "\\\\", StringComparison.Ordinal)
+        .Replace("\"", "\\\"", StringComparison.Ordinal)
+        .Replace("\n", "\\n", StringComparison.Ordinal)
+        .Replace("\r", "\\r", StringComparison.Ordinal)
+        .Replace("\t", "\\t", StringComparison.Ordinal);
+}
+
+static bool IsAssemblyLoadFailure(Exception exception)
+    => exception is FileNotFoundException or FileLoadException or BadImageFormatException
+        || (exception.InnerException is not null && IsAssemblyLoadFailure(exception.InnerException));

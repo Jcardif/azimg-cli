@@ -152,8 +152,8 @@ public class CommandDispatcherTests
 
             string diagnosticOutput = stderr.ToString();
             Assert.Contains("Generating 2 images", diagnosticOutput, StringComparison.Ordinal);
-            Assert.Contains("Generation response received", diagnosticOutput, StringComparison.Ordinal);
-            Assert.Contains("Generation complete", diagnosticOutput, StringComparison.Ordinal);
+            Assert.Contains("Generated", diagnosticOutput, StringComparison.Ordinal);
+            Assert.DoesNotContain("Saving 2 images", diagnosticOutput, StringComparison.Ordinal);
         }
         finally
         {
@@ -230,8 +230,8 @@ public class CommandDispatcherTests
 
             string diagnosticOutput = stderr.ToString();
             Assert.Contains("Editing 1 image", diagnosticOutput, StringComparison.Ordinal);
-            Assert.Contains("Edit response received", diagnosticOutput, StringComparison.Ordinal);
-            Assert.Contains("Edit complete", diagnosticOutput, StringComparison.Ordinal);
+            Assert.Contains("Edited 1 file", diagnosticOutput, StringComparison.Ordinal);
+            Assert.DoesNotContain("Saving 1 image", diagnosticOutput, StringComparison.Ordinal);
         }
         finally
         {

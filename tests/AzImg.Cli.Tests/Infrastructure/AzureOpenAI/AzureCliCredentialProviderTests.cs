@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Azure.Core;
+using Azure.Identity;
 using AzImg.Cli.Infrastructure.AzureOpenAI;
 using AzImg.Cli.Runtime;
 
@@ -8,16 +9,60 @@ namespace AzImg.Cli.Tests.Infrastructure.AzureOpenAI;
 public class AzureCliCredentialProviderTests
 {
     [Fact]
-    public void CreateStartInfo_RedirectsOnlyStandardOutput()
+    public void CreateStartInfo_RedirectsProcessOutputToFilesWithoutPipes()
     {
-        ProcessStartInfo startInfo = AzureCliProcessAccessTokenSource.CreateStartInfo("https://cognitiveservices.azure.com");
+        ProcessStartInfo startInfo = AzureCliProcessAccessTokenSource.CreateStartInfo(
+            "https://cognitiveservices.azure.com",
+            "/tmp/stdout.json",
+            "/tmp/stderr.txt");
 
-        Assert.Equal(OperatingSystem.IsWindows() ? "az.cmd" : "az", startInfo.FileName);
         Assert.False(startInfo.UseShellExecute);
-        Assert.True(startInfo.RedirectStandardOutput);
+        Assert.False(startInfo.RedirectStandardOutput);
         Assert.False(startInfo.RedirectStandardError);
-        Assert.Contains("get-access-token", startInfo.ArgumentList);
-        Assert.Contains("--only-show-errors", startInfo.ArgumentList);
+        string arguments = OperatingSystem.IsWindows()
+            ? startInfo.Arguments
+            : string.Join(" ", startInfo.ArgumentList);
+        Assert.Contains("get-access-token", arguments, StringComparison.Ordinal);
+        Assert.Contains("--only-show-errors", arguments, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CreateWindowsArguments_UsesCmdStringWithoutBackslashEscapedQuotes()
+    {
+        string arguments = AzureCliProcessAccessTokenSource.CreateWindowsArguments();
+
+        Assert.Contains("/d /s /c \"\"az.cmd\"", arguments, StringComparison.Ordinal);
+        Assert.Contains("\"%AZIMG_STDOUT%\" 2> \"%AZIMG_STDERR%\"", arguments, StringComparison.Ordinal);
+        Assert.DoesNotContain("\\\"", arguments, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PrepareTokenRedirectionFiles_CreatesOwnerOnlyFilesOnUnix()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string stdoutPath = Path.Combine(directory, "stdout.json");
+        string stderrPath = Path.Combine(directory, "stderr.txt");
+
+        try
+        {
+            AzureCliProcessAccessTokenSource.PrepareTokenRedirectionFiles(directory, stdoutPath, stderrPath);
+
+            Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, File.GetUnixFileMode(directory));
+            Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(stdoutPath));
+            Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(stderrPath));
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
     }
 
     [Fact]
@@ -49,6 +94,65 @@ public class AzureCliCredentialProviderTests
         Assert.Equal("token-1", second.Token);
         Assert.Equal(1, source.Calls);
         Assert.Equal("https://cognitiveservices.azure.com", source.LastResource);
+    }
+
+    [Fact]
+    public void GetAccessToken_FailedAzureCliSummarizesTracebackWithoutPrintingIt()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string binDirectory = Path.Combine(directory, "bin");
+        string? originalPath = Environment.GetEnvironmentVariable("PATH");
+
+        try
+        {
+            Directory.CreateDirectory(binDirectory);
+            WriteFailingAz(binDirectory);
+            Environment.SetEnvironmentVariable("PATH", binDirectory + Path.PathSeparator + originalPath);
+
+            AuthenticationFailedException exception = Assert.Throws<AuthenticationFailedException>(
+                () => new AzureCliProcessAccessTokenSource().GetAccessToken("https://cognitiveservices.azure.com", CancellationToken.None));
+
+            Assert.Contains("could not resolve login.microsoftonline.com", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Traceback", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("site-packages", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PATH", originalPath);
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
+    private static void WriteFailingAz(string binDirectory)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            File.WriteAllText(
+                Path.Combine(binDirectory, "az.cmd"),
+                """
+                @echo off
+                echo ERROR: The command failed with an unexpected error. Here is the traceback: 1>&2
+                echo Traceback ^(most recent call last^): 1>&2
+                echo requests.exceptions.ConnectionError: HTTPSConnectionPool(host='login.microsoftonline.com', port=443): NameResolutionError 1>&2
+                exit /b 1
+                """);
+            return;
+        }
+
+        string azPath = Path.Combine(binDirectory, "az");
+        File.WriteAllText(
+            azPath,
+            """
+            #!/bin/sh
+            echo "ERROR: The command failed with an unexpected error. Here is the traceback:" >&2
+            echo "Traceback (most recent call last):" >&2
+            echo "requests.exceptions.ConnectionError: HTTPSConnectionPool(host='login.microsoftonline.com', port=443): NameResolutionError" >&2
+            exit 1
+            """);
+        File.SetUnixFileMode(azPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
     }
 
     private sealed class FakeAccessTokenSource : IAzureCliAccessTokenSource

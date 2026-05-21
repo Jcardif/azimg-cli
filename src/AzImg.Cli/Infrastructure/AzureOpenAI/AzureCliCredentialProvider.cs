@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.Versioning;
 using System.Text.Json;
 using Azure.Core;
 using Azure.Identity;
@@ -160,12 +161,19 @@ internal sealed record AzureCliAccessToken(string Token, DateTimeOffset ExpiresO
 internal sealed class AzureCliProcessAccessTokenSource : IAzureCliAccessTokenSource
 {
     private const int ProcessWaitMilliseconds = 100;
+    private const UnixFileMode TokenDirectoryMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+    private const UnixFileMode TokenFileMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
 
     public AzureCliAccessToken GetAccessToken(string resource, CancellationToken cancellationToken)
     {
+        string tempDirectory = Path.Combine(Path.GetTempPath(), $"azimg-az-{Guid.NewGuid():N}");
+        string stdoutPath = Path.Combine(tempDirectory, "stdout.json");
+        string stderrPath = Path.Combine(tempDirectory, "stderr.txt");
+        PrepareTokenRedirectionFiles(tempDirectory, stdoutPath, stderrPath);
+
         using Process process = new()
         {
-            StartInfo = CreateStartInfo(resource),
+            StartInfo = CreateStartInfo(resource, stdoutPath, stderrPath),
         };
 
         try
@@ -187,10 +195,11 @@ internal sealed class AzureCliProcessAccessTokenSource : IAzureCliAccessTokenSou
         try
         {
             WaitForExit(process, cancellationToken);
-            string output = process.StandardOutput.ReadToEnd();
+            string output = ReadFileIfExists(stdoutPath);
+            string error = ReadFileIfExists(stderrPath);
             if (process.ExitCode != 0)
             {
-                throw new AuthenticationFailedException($"Azure CLI failed to acquire an Azure token for resource '{resource}'.");
+                throw new AuthenticationFailedException(CreateFailureMessage(resource, error, output));
             }
 
             return ParseAccessTokenOutput(output);
@@ -204,19 +213,66 @@ internal sealed class AzureCliProcessAccessTokenSource : IAzureCliAccessTokenSou
         {
             throw new AuthenticationFailedException("Azure CLI token output could not be read.", ex);
         }
+        finally
+        {
+            TryDeleteDirectory(tempDirectory);
+        }
     }
 
-    internal static ProcessStartInfo CreateStartInfo(string resource)
+    internal static ProcessStartInfo CreateStartInfo(string resource, string stdoutPath, string stderrPath)
+    {
+        ProcessStartInfo startInfo = OperatingSystem.IsWindows()
+            ? CreateWindowsStartInfo(resource, stdoutPath, stderrPath)
+            : CreateUnixStartInfo(resource, stdoutPath, stderrPath);
+
+        startInfo.RedirectStandardOutput = false;
+        startInfo.RedirectStandardError = false;
+        startInfo.UseShellExecute = false;
+        startInfo.CreateNoWindow = true;
+        return startInfo;
+    }
+
+    internal static void PrepareTokenRedirectionFiles(string tempDirectory, string stdoutPath, string stderrPath)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Directory.CreateDirectory(tempDirectory);
+            File.Create(stdoutPath).Dispose();
+            File.Create(stderrPath).Dispose();
+            return;
+        }
+
+        Directory.CreateDirectory(tempDirectory, TokenDirectoryMode);
+        CreatePrivateTokenFile(stdoutPath);
+        CreatePrivateTokenFile(stderrPath);
+    }
+
+    [UnsupportedOSPlatform("windows")]
+    private static void CreatePrivateTokenFile(string path)
+    {
+        FileStreamOptions options = new()
+        {
+            Mode = FileMode.CreateNew,
+            Access = FileAccess.Write,
+            Share = FileShare.Read,
+            UnixCreateMode = TokenFileMode,
+        };
+        using FileStream stream = new(path, options);
+    }
+
+    private static ProcessStartInfo CreateUnixStartInfo(string resource, string stdoutPath, string stderrPath)
     {
         ProcessStartInfo startInfo = new()
         {
-            FileName = OperatingSystem.IsWindows() ? "az.cmd" : "az",
-            RedirectStandardOutput = true,
-            RedirectStandardError = false,
-            UseShellExecute = false,
-            CreateNoWindow = true,
+            FileName = "/bin/sh",
         };
 
+        startInfo.Environment["AZIMG_STDOUT"] = stdoutPath;
+        startInfo.Environment["AZIMG_STDERR"] = stderrPath;
+        startInfo.ArgumentList.Add("-c");
+        startInfo.ArgumentList.Add("exec \"$@\" > \"$AZIMG_STDOUT\" 2> \"$AZIMG_STDERR\"");
+        startInfo.ArgumentList.Add("azimg-az");
+        startInfo.ArgumentList.Add("az");
         startInfo.ArgumentList.Add("account");
         startInfo.ArgumentList.Add("get-access-token");
         startInfo.ArgumentList.Add("--resource");
@@ -226,6 +282,24 @@ internal sealed class AzureCliProcessAccessTokenSource : IAzureCliAccessTokenSou
         startInfo.ArgumentList.Add("--only-show-errors");
         return startInfo;
     }
+
+    private static ProcessStartInfo CreateWindowsStartInfo(string resource, string stdoutPath, string stderrPath)
+    {
+        ProcessStartInfo startInfo = new()
+        {
+            FileName = "cmd.exe",
+            Arguments = CreateWindowsArguments(),
+        };
+
+        startInfo.Environment["AZIMG_RESOURCE"] = resource;
+        startInfo.Environment["AZIMG_STDOUT"] = stdoutPath;
+        startInfo.Environment["AZIMG_STDERR"] = stderrPath;
+        return startInfo;
+    }
+
+    internal static string CreateWindowsArguments()
+        => "/d /s /c \"\"az.cmd\" \"account\" \"get-access-token\" \"--resource\" \"%AZIMG_RESOURCE%\" "
+            + "\"--output\" \"json\" \"--only-show-errors\" > \"%AZIMG_STDOUT%\" 2> \"%AZIMG_STDERR%\"\"";
 
     internal static AzureCliAccessToken ParseAccessTokenOutput(string output)
     {
@@ -304,6 +378,83 @@ internal sealed class AzureCliProcessAccessTokenSource : IAzureCliAccessTokenSou
         {
         }
         catch (Win32Exception)
+        {
+        }
+    }
+
+    private static string CreateFailureMessage(string resource, string error, string output)
+    {
+        string detail = SummarizeFailure(error);
+        if (string.IsNullOrWhiteSpace(detail))
+        {
+            detail = SummarizeFailure(output);
+        }
+
+        return string.IsNullOrWhiteSpace(detail)
+            ? $"Azure CLI failed to acquire an Azure token for resource '{resource}'."
+            : $"Azure CLI failed to acquire an Azure token for resource '{resource}'. {detail}";
+    }
+
+    private static string SummarizeFailure(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        string normalized = text.Trim();
+        if (normalized.Contains("Failed to resolve 'login.microsoftonline.com'", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("NameResolutionError", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Azure CLI could not resolve login.microsoftonline.com. Check DNS or network connectivity and try again.";
+        }
+
+        string[] lines = normalized.Split(
+            ["\r\n", "\n"],
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        for (int index = lines.Length - 1; index >= 0; index--)
+        {
+            string line = lines[index];
+            if (line.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase))
+            {
+                return Truncate(line["ERROR:".Length..].Trim());
+            }
+        }
+
+        for (int index = lines.Length - 1; index >= 0; index--)
+        {
+            string line = lines[index];
+            if (!line.StartsWith("Traceback ", StringComparison.OrdinalIgnoreCase)
+                && !line.StartsWith("File ", StringComparison.Ordinal)
+                && !line.StartsWith("~", StringComparison.Ordinal)
+                && !line.StartsWith("^", StringComparison.Ordinal))
+            {
+                return Truncate(line);
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private static string Truncate(string value)
+        => value.Length <= 500 ? value : value[..500] + "...";
+
+    private static string ReadFileIfExists(string path)
+        => File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+
+    private static void TryDeleteDirectory(string directory)
+    {
+        try
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
         {
         }
     }

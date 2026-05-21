@@ -1,39 +1,55 @@
 using System.Diagnostics;
+using Spectre.Console;
 
 namespace AzImg.Cli.Runtime;
 
 /// <summary>
-/// Writes low-volume progress messages for long-running operations without polluting structured stdout.
+/// Renders one-line progress for long-running operations without polluting structured stdout.
 /// </summary>
 public sealed class OperationProgress : IAsyncDisposable
 {
-    private static readonly TimeSpan DefaultHeartbeatInterval = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan LiveRefreshInterval = TimeSpan.FromMilliseconds(250);
+    private static readonly string[] Frames = ["✦", "◆", "●", "◇"];
 
     private readonly TextWriter _writer;
-    private readonly string _heartbeatMessage;
-    private readonly TimeSpan _heartbeatInterval;
+    private readonly IAnsiConsole _console;
+    private readonly bool _renderLive;
     private readonly CancellationTokenSource _stopping = new();
     private readonly Stopwatch _elapsed = Stopwatch.StartNew();
     private readonly Task _heartbeatTask;
     private readonly object _writeLock = new();
+    private string _message;
+    private int _frameIndex;
+    private int _lastLineWidth;
     private bool _completed;
 
-    private OperationProgress(TextWriter writer, string startedMessage, string heartbeatMessage, TimeSpan heartbeatInterval)
+    private OperationProgress(TextWriter writer, string startedMessage)
     {
         _writer = writer;
-        _heartbeatMessage = heartbeatMessage;
-        _heartbeatInterval = heartbeatInterval;
-        WriteLine(startedMessage);
-        _heartbeatTask = RunHeartbeatAsync();
+        _message = startedMessage;
+        AnsiConsoleOutput output = new(writer);
+        _renderLive = ReferenceEquals(writer, Console.Error) && output.IsTerminal && !Console.IsErrorRedirected;
+        _console = AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Ansi = _renderLive ? AnsiSupport.Yes : AnsiSupport.No,
+            ColorSystem = _renderLive ? ColorSystemSupport.TrueColor : ColorSystemSupport.NoColors,
+            Interactive = InteractionSupport.No,
+            Out = output,
+        });
+        RenderCurrent();
+        _heartbeatTask = _renderLive ? RunHeartbeatAsync() : Task.CompletedTask;
     }
 
-    /// <summary>Starts progress reporting immediately and then emits periodic heartbeat messages.</summary>
-    public static OperationProgress Start(TextWriter writer, string startedMessage, string heartbeatMessage)
-        => new(writer, startedMessage, heartbeatMessage, DefaultHeartbeatInterval);
+    /// <summary>Starts progress reporting immediately.</summary>
+    public static OperationProgress Start(TextWriter writer, string startedMessage)
+        => new(writer, startedMessage);
 
     /// <summary>Writes an intermediate progress message.</summary>
     public void Report(string message)
-        => WriteLine(message);
+    {
+        _message = message;
+        RenderCurrent();
+    }
 
     /// <summary>Writes a completion message including elapsed time.</summary>
     public void Complete(string message)
@@ -45,7 +61,7 @@ public sealed class OperationProgress : IAsyncDisposable
 
         _completed = true;
         _elapsed.Stop();
-        WriteLine($"{message} Elapsed: {FormatElapsed(_elapsed.Elapsed)}.");
+        RenderFinal($"{message} Elapsed: {FormatElapsed(_elapsed.Elapsed)}.");
     }
 
     /// <inheritdoc />
@@ -70,23 +86,58 @@ public sealed class OperationProgress : IAsyncDisposable
     {
         while (true)
         {
-            await Task.Delay(_heartbeatInterval, _stopping.Token).ConfigureAwait(false);
+            await Task.Delay(LiveRefreshInterval, _stopping.Token).ConfigureAwait(false);
             if (_completed)
             {
                 return;
             }
 
-            WriteLine($"{_heartbeatMessage} Elapsed: {FormatElapsed(_elapsed.Elapsed)}.");
+            _frameIndex++;
+            RenderCurrent();
         }
     }
 
-    private void WriteLine(string message)
+    private void RenderCurrent()
+        => RenderLine(_message, complete: false);
+
+    private void RenderFinal(string message)
+        => RenderLine(message, complete: true);
+
+    private void RenderLine(string message, bool complete)
     {
         try
         {
             lock (_writeLock)
             {
-                _writer.WriteLine(message);
+                string markup = CreateMarkup(message, complete);
+                if (_renderLive)
+                {
+                    int width = markup.RemoveMarkup().Length;
+                    _writer.Write('\r');
+                    _console.Markup(markup);
+                    if (_lastLineWidth > width)
+                    {
+                        _writer.Write(new string(' ', _lastLineWidth - width));
+                        _writer.Write('\r');
+                        _console.Markup(markup);
+                    }
+
+                    _lastLineWidth = width;
+                    if (complete)
+                    {
+                        _writer.WriteLine();
+                    }
+
+                    return;
+                }
+
+                if (!complete && _lastLineWidth > 0)
+                {
+                    return;
+                }
+
+                _console.MarkupLine(markup);
+                _lastLineWidth = markup.RemoveMarkup().Length;
             }
         }
         catch (IOException)
@@ -95,6 +146,14 @@ public sealed class OperationProgress : IAsyncDisposable
         catch (ObjectDisposedException)
         {
         }
+    }
+
+    private string CreateMarkup(string message, bool complete)
+    {
+        string icon = complete ? "✓" : Frames[_frameIndex % Frames.Length];
+        string color = complete ? "green" : "deepskyblue1";
+        string escaped = message.EscapeMarkup();
+        return $"[{color} bold]{icon}[/] [bold]{escaped}[/] [grey58]·[/] [dim]{FormatElapsed(_elapsed.Elapsed)}[/]";
     }
 
     private static string FormatElapsed(TimeSpan elapsed)

@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 project_path="$repo_root/src/AzImg.Cli/AzImg.Cli.csproj"
 rid=""
-version="0.1.0"
+version="0.1.2"
 output_root="$repo_root/artifacts"
 mode="single-file"
 
@@ -14,9 +14,9 @@ Usage: eng/publish-release.sh --rid <rid> [options]
 
 Options:
   --rid <rid>          Target RID: win-x64, win-arm64, osx-arm64, or linux-x64.
-  --version <version>  Version to stamp into the published binary. Default: 0.1.0.
+  --version <version>  Version to stamp into the published binary. Default: 0.1.2.
   --output <path>      Artifact root. Default: ./artifacts.
-  --mode <mode>        single-file, trimmed, or aot. Default: single-file.
+  --mode <mode>        single-file. Default: single-file.
   -h, --help           Show this help.
 USAGE
 }
@@ -88,11 +88,7 @@ publish_args=(
   -p:EnableCompressionInSingleFile=true
 )
 
-if [ "$mode" = "trimmed" ]; then
-  publish_args+=( -p:PublishTrimmed=true -p:TrimMode=partial )
-elif [ "$mode" = "aot" ]; then
-  publish_args+=( -p:PublishAot=true )
-elif [ "$mode" != "single-file" ]; then
+if [ "$mode" != "single-file" ]; then
   echo "Unsupported mode: $mode" >&2
   exit 1
 fi

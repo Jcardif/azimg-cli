@@ -121,11 +121,10 @@ public sealed class CommandDispatcher
 
         await using OperationProgress progress = OperationProgress.Start(
             Console.Error,
-            $"Generating {FormatImageCount(request.Count)} with deployment '{profile.DeploymentName}'. This can take a few minutes.",
-            $"Still generating {FormatImageCount(request.Count)}; waiting for Azure OpenAI.");
+            $"Generating {FormatImageCount(request.Count)} · {profile.DeploymentName} · waiting for Azure OpenAI");
 
         GeneratedImageResult result = await _imageClient.GenerateAsync(profile, request, cancellationToken);
-        progress.Report($"Generation response received; saving {FormatImageCount(result.Images.Count)}.");
+        progress.Report($"Saving {FormatImageCount(result.Images.Count)} · writing image files");
         SaveImagesResult saveResult = await _imageFileStore.SaveAsync(
             profile,
             prompt,
@@ -133,7 +132,7 @@ public sealed class CommandDispatcher
             request.WriteManifest,
             result,
             cancellationToken);
-        progress.Complete($"Generation complete; saved {FormatFileCount(saveResult.Files.Count)}.");
+        progress.Complete($"Generated {FormatFileCount(saveResult.Files.Count)}");
 
         if (json)
         {
@@ -200,11 +199,10 @@ public sealed class CommandDispatcher
 
         await using OperationProgress progress = OperationProgress.Start(
             Console.Error,
-            $"Editing {FormatImageCount(request.Count)} with deployment '{profile.DeploymentName}'. This can take a few minutes.",
-            $"Still editing {FormatImageCount(request.Count)}; waiting for Azure OpenAI.");
+            $"Editing {FormatImageCount(request.Count)} · {profile.DeploymentName} · waiting for Azure OpenAI");
 
         GeneratedImageResult result = await _imageClient.EditAsync(profile, request, cancellationToken);
-        progress.Report($"Edit response received; saving {FormatImageCount(result.Images.Count)}.");
+        progress.Report($"Saving {FormatImageCount(result.Images.Count)} · writing image files");
         SaveImagesResult saveResult = await _imageFileStore.SaveAsync(
             profile,
             prompt,
@@ -212,7 +210,7 @@ public sealed class CommandDispatcher
             request.WriteManifest,
             result,
             cancellationToken);
-        progress.Complete($"Edit complete; saved {FormatFileCount(saveResult.Files.Count)}.");
+        progress.Complete($"Edited {FormatFileCount(saveResult.Files.Count)}");
 
         if (json)
         {

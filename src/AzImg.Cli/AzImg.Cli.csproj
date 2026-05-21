@@ -11,7 +11,7 @@
     <Title>AzImg CLI</Title>
     <Product>AzImg CLI</Product>
     <Description>Azure OpenAI image generation CLI authenticated with Azure CLI credentials.</Description>
-    <Version>0.1.1</Version>
+    <Version>0.1.2</Version>
     <RuntimeIdentifiers>win-x64;win-arm64;osx-arm64;linux-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
@@ -19,6 +19,7 @@
     <PackageReference Include="Azure.AI.OpenAI" Version="2.9.0-beta.1" />
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
     <PackageReference Include="OpenAI" Version="2.10.0" />
+    <PackageReference Include="Spectre.Console" Version="0.55.2" />
   </ItemGroup>
 
 </Project>

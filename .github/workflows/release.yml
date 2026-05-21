@@ -17,7 +17,6 @@ on:
         type: choice
         options:
           - "single-file"
-          - "aot"
       release_notes_path:
         description: "Curated release notes markdown path"
         required: false
@@ -87,12 +86,6 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Install Linux Native AOT prerequisites
-        if: env.PUBLISH_MODE == 'aot' && runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang zlib1g-dev
-
       - name: Publish
         shell: pwsh
         run: |
@@ -108,9 +101,6 @@ jobs:
             '-p:PublishSingleFile=true',
             '-p:EnableCompressionInSingleFile=true'
           )
-          if ($env:PUBLISH_MODE -eq 'aot') {
-            $publishArgs += '-p:PublishAot=true'
-          }
           dotnet @publishArgs
 
       - name: Smoke test
