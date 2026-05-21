@@ -33,8 +33,9 @@ public class ProfileResolverTests
     }
 
     [Fact]
-    public void Resolve_ExpandsHomeDirectoryInOutputPath()
+    public void Resolve_IgnoresLegacyProfileOutputDirectory()
     {
+        string profileOutputDirectory = Path.Combine(CliPath.GetHomeDirectory(), ".azimg", "output");
         AppConfig config = new()
         {
             DefaultProfile = "azure-default",
@@ -44,14 +45,27 @@ public class ProfileResolverTests
                 {
                     Deployment = "gpt-image-2",
                     Endpoint = "https://example.openai.azure.com/",
-                    OutputDirectory = "~/.azimg/output",
+                    OutputDirectory = profileOutputDirectory,
                 },
             },
         };
 
         ResolvedProfile resolved = new ProfileResolver().Resolve(config, new ProfileOverrides(null, null, null, null));
 
-        Assert.Equal(Path.Combine(CliPath.GetHomeDirectory(), ".azimg", "output"), resolved.OutputDirectory);
+        Assert.NotEqual(profileOutputDirectory, resolved.OutputDirectory);
+        Assert.Equal(Path.Combine(Environment.CurrentDirectory, CliDefaults.DefaultOutputDirectoryName), resolved.OutputDirectory);
+    }
+
+    [Fact]
+    public void Resolve_UsesCurrentDirectoryOutputFolderByDefault()
+    {
+        ProfileResolver resolver = new();
+
+        ResolvedProfile resolved = resolver.Resolve(
+            null,
+            new ProfileOverrides(null, "gpt-image-2", "https://example.openai.azure.com/", null));
+
+        Assert.Equal(Path.Combine(Environment.CurrentDirectory, CliDefaults.DefaultOutputDirectoryName), resolved.OutputDirectory);
     }
 
     [Fact]

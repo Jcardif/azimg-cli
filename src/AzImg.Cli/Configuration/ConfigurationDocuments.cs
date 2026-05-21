@@ -20,7 +20,7 @@ public sealed class AppConfig
 }
 
 /// <summary>
-/// Named Azure OpenAI profile containing deployment, endpoint, and default output settings.
+/// Named Azure OpenAI profile containing Azure connection settings.
 /// </summary>
 public sealed class ProfileConfig
 {
@@ -30,7 +30,7 @@ public sealed class ProfileConfig
     /// <summary>The absolute Azure OpenAI resource endpoint.</summary>
     public string? Endpoint { get; set; }
 
-    /// <summary>The directory where generated or edited images are written by default.</summary>
+    /// <summary>Legacy optional output directory accepted when reading older config files.</summary>
     public string? OutputDirectory { get; set; }
 }
 

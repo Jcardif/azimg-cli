@@ -278,6 +278,7 @@ public sealed class CommandDispatcher
     {
         ParsedArguments parsed = CommandLineParser.Parse(args, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
+            ["p"] = "profile",
             ["h"] = "help",
             ["?"] = "help",
         }, CreateConfigValueOptions(), CreateConfigFlagOptions());
@@ -319,6 +320,7 @@ public sealed class CommandDispatcher
         if (action.Equals("init", StringComparison.OrdinalIgnoreCase))
         {
             AppConfig sample = _configurationStore.CreateSampleConfig();
+            ApplyConfigInitOverrides(sample, parsed);
             await _configurationStore.SaveAsync(sample, path, parsed.GetFlag("force"), cancellationToken);
             string configPath = path is null ? _configurationStore.GetDefaultPath() : CliPath.GetFullPath(path);
             if (json)
@@ -368,6 +370,61 @@ public sealed class CommandDispatcher
         }
 
         throw new CliException($"Unsupported config action '{action}'.", ExitCodes.Usage);
+    }
+
+    private static void ApplyConfigInitOverrides(AppConfig config, ParsedArguments parsed)
+    {
+        string profileName = NormalizeConfigInitProfileName(parsed.Get("profile") ?? config.DefaultProfile ?? "azure-default");
+        ProfileConfig starterProfile = config.Profiles.TryGetValue(config.DefaultProfile ?? profileName, out ProfileConfig? existingProfile)
+            ? existingProfile
+            : new ProfileConfig();
+
+        ProfileConfig profile = new()
+        {
+            Deployment = NormalizeConfigInitValue(parsed.Get("deployment")) ?? starterProfile.Deployment,
+            Endpoint = NormalizeConfigInitEndpoint(parsed.Get("endpoint")) ?? starterProfile.Endpoint,
+        };
+
+        config.DefaultProfile = profileName;
+        config.Profiles = new Dictionary<string, ProfileConfig>(StringComparer.OrdinalIgnoreCase)
+        {
+            [profileName] = profile,
+        };
+    }
+
+    private static string NormalizeConfigInitProfileName(string value)
+    {
+        string normalized = value.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            throw new CliException("--profile cannot be empty when initializing config.", ExitCodes.Validation);
+        }
+
+        return normalized;
+    }
+
+    private static string? NormalizeConfigInitValue(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string? NormalizeConfigInitEndpoint(string? value)
+    {
+        string? endpoint = NormalizeConfigInitValue(value);
+        if (endpoint is null)
+        {
+            return null;
+        }
+
+        if (!Uri.TryCreate(endpoint, UriKind.Absolute, out Uri? uri))
+        {
+            throw new CliException($"The Azure endpoint '{endpoint}' is not a valid absolute URI.", ExitCodes.Validation);
+        }
+
+        if (!uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new CliException("The Azure endpoint must use https.", ExitCodes.Validation);
+        }
+
+        return endpoint;
     }
 
     private int RunVersion(string[] args)
@@ -589,6 +646,8 @@ public sealed class CommandDispatcher
             "action",
             "path",
             "profile",
+            "deployment",
+            "endpoint",
             "format",
         };
 

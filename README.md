@@ -110,7 +110,16 @@ This writes the banner image and manifest to `./output/banner`.
 ## ⚙️ Configuration and common settings
 
 The default configuration file is `~/.azimg/config.json`.
-Run `azimg config init --force`, then edit endpoint and deployment.
+Run `azimg config init --force`, or pass values up front so no manual edit is
+needed. The default output folder is `azimg-output`, resolved relative to the
+directory where you run `azimg`.
+
+```bash
+azimg config init --force \
+  --profile azure-default \
+  --deployment gpt-image-2 \
+  --endpoint https://your-resource.openai.azure.com/
+```
 
 ```json
 {
@@ -119,8 +128,7 @@ Run `azimg config init --force`, then edit endpoint and deployment.
   "profiles": {
     "azure-default": {
       "deployment": "gpt-image-2",
-      "endpoint": "https://your-resource.openai.azure.com/",
-      "outputDirectory": "~/.azimg/output"
+      "endpoint": "https://your-resource.openai.azure.com/"
     }
   }
 }
@@ -142,22 +150,23 @@ Commands below omit the leading `azimg` unless the command is global.
 | `edit <FILE> <PROMPT>` | Edit an image. | File and prompt. |
 | `doctor` | Validate config and output setup. | None. |
 | `config` or `config show` | Print the current config. | None. |
-| `config init` | Create a starter config. | None. |
+| `config init` | Create a starter config. | Optional profile values. |
 | `config set-default-profile` | Set default profile. | `--profile <NAME>` |
 | `install-skill` | Install the AzImg agent skill. | None. |
 | `update check` | Check for a newer release. | None. |
 | `update` or `update apply` | Install the selected release. | None. |
 | `version` | Print version information. | None. |
 
-### Profile and Azure options
+### Profile, Azure, and output options
 
-Use these with `generate`, `edit`, and `doctor` to override a config profile.
+Use these with `generate`, `edit`, and `doctor` for per-run settings.
 
 - `-p, --profile <NAME>`: Use a named profile from the config file.
 - `--config <PATH>`: Read a config file other than `~/.azimg/config.json`.
 - `--deployment <NAME>`: Override the Azure OpenAI deployment name.
 - `--endpoint <URL>`: Override the Azure OpenAI endpoint.
-- `-o, --output-directory <PATH>`: Override where generated files are written.
+- `-o, --output-directory <PATH>`: Set where generated files are written for
+  this run.
 
 ### Image generation and edit options
 
@@ -179,6 +188,10 @@ Use these with `generate` and `edit`.
 
 - `config` defaults to `config show`.
 - `config init --force` overwrites an existing config file.
+- `config init` accepts optional `--profile`, `--deployment`, and `--endpoint`
+  values.
+- Image output defaults to `azimg-output` under the command's current directory
+  unless `generate` or `edit` gets `--output-directory`.
 - `config set-default-profile --profile <NAME>` changes the default profile.
 - `--path <PATH>` reads or writes a specific config file.
 - `--action <ACTION>` selects the action by option instead of position.

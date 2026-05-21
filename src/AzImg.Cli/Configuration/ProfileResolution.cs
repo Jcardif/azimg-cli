@@ -34,7 +34,8 @@ public sealed record ResolvedProfile(
 /// <remarks>
 /// Precedence is deliberately simple and script-friendly: explicit command-line values win, then the
 /// selected profile, then safe local defaults where possible. Deployment and endpoint are required
-/// because the CLI cannot infer the target Azure OpenAI resource.
+/// because the CLI cannot infer the target Azure OpenAI resource. Output location is deliberately
+/// resolved from the command line or current working directory, not from profiles.
 /// </remarks>
 public sealed class ProfileResolver
 {
@@ -94,8 +95,7 @@ public sealed class ProfileResolver
 
         string outputDirectory = CliPath.GetFullPath(
             overrides.OutputDirectory
-            ?? profile?.OutputDirectory
-            ?? Path.Combine(Environment.CurrentDirectory, "output"));
+            ?? CliDefaults.DefaultOutputDirectoryName);
 
         return new ResolvedProfile(profileName, deployment, endpoint, outputDirectory);
     }

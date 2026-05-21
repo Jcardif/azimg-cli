@@ -101,8 +101,6 @@ public sealed class ConfigurationStore
     /// </summary>
     public AppConfig CreateSampleConfig()
     {
-        string home = GetHomeDirectory();
-
         return new AppConfig
         {
             DefaultProfile = "azure-default",
@@ -112,7 +110,6 @@ public sealed class ConfigurationStore
                 {
                     Deployment = "gpt-image-2",
                     Endpoint = "https://your-resource.openai.azure.com/",
-                    OutputDirectory = Path.Combine(home, CliDefaults.ConfigDirectoryName, "output"),
                 },
             },
         };

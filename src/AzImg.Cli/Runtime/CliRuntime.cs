@@ -49,8 +49,11 @@ public static class CliDefaults
     /// <summary>The application identifier sent in Azure SDK user-agent metadata.</summary>
     public const string UserAgentApplicationId = "azimg";
 
-    /// <summary>The hidden directory under the user profile that stores config and default output.</summary>
+    /// <summary>The hidden directory under the user profile that stores config and metadata.</summary>
     public const string ConfigDirectoryName = ".azimg";
+
+    /// <summary>The relative output directory used when no command-specific output path is supplied.</summary>
+    public const string DefaultOutputDirectoryName = "azimg-output";
 
     /// <summary>The configuration file name inside <see cref="ConfigDirectoryName" />.</summary>
     public const string ConfigFileName = "config.json";

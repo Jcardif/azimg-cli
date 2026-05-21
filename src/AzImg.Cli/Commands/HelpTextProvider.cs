@@ -72,7 +72,9 @@ public sealed class HelpTextProvider
         writer.WriteLine("Options:");
         writer.WriteLine("      --action <value>             Explicit action name.");
         writer.WriteLine("      --path <path>                Explicit config file path.");
-        writer.WriteLine("      --profile <name>             Profile name for set-default-profile.");
+        writer.WriteLine("  -p, --profile <name>             Profile name for init or set-default-profile.");
+        writer.WriteLine("      --deployment <name>          Deployment name to write during init.");
+        writer.WriteLine("      --endpoint <url>             Azure OpenAI endpoint to write during init.");
         writer.WriteLine("      --force                      Overwrite existing config during init.");
         WriteStructuredOutputOptions(writer);
     }

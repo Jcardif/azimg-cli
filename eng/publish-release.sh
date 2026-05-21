@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 project_path="$repo_root/src/AzImg.Cli/AzImg.Cli.csproj"
 rid=""
-version="0.1.2"
+version="0.1.3"
 output_root="$repo_root/artifacts"
 mode="single-file"
 
@@ -14,7 +14,7 @@ Usage: eng/publish-release.sh --rid <rid> [options]
 
 Options:
   --rid <rid>          Target RID: win-x64, win-arm64, osx-arm64, or linux-x64.
-  --version <version>  Version to stamp into the published binary. Default: 0.1.2.
+  --version <version>  Version to stamp into the published binary. Default: 0.1.3.
   --output <path>      Artifact root. Default: ./artifacts.
   --mode <mode>        single-file. Default: single-file.
   -h, --help           Show this help.
@@ -56,6 +56,11 @@ if [ -z "$rid" ]; then
   usage >&2
   exit 1
 fi
+
+case "$output_root" in
+  /*) ;;
+  *) output_root="$repo_root/$output_root" ;;
+esac
 
 case "$rid" in
   win-x64|win-arm64)

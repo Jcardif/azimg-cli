@@ -15,6 +15,7 @@ public class ConfigurationStoreTests
         Assert.Equal("azure-default", config.DefaultProfile);
         Assert.Contains("azure-default", config.Profiles.Keys);
         Assert.Equal("gpt-image-2", config.Profiles["azure-default"].Deployment);
+        Assert.Null(config.Profiles["azure-default"].OutputDirectory);
     }
 
     [Fact]
