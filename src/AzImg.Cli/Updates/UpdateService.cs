@@ -26,6 +26,9 @@ public interface IUpdateService
 
     /// <summary>Applies the selected update, or reports planned work when <see cref="UpdateCommandOptions.DryRun" /> is true.</summary>
     Task<UpdateApplyDocument> ApplyAsync(UpdateCommandOptions options, CancellationToken cancellationToken);
+
+    /// <summary>Removes the installed executable, optionally removing local config and skill files.</summary>
+    Task<UninstallDocument> UninstallAsync(UninstallCommandOptions options, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -63,6 +66,21 @@ public sealed class NoOpUpdateService : IUpdateService
             Environment.ProcessPath,
             CliDefaults.LatestReleaseManifestUrl,
             Asset: null,
+            "No update service is configured."));
+
+    /// <inheritdoc />
+    public Task<UninstallDocument> UninstallAsync(UninstallCommandOptions options, CancellationToken cancellationToken)
+        => Task.FromResult(new UninstallDocument(
+            CliDefaults.ProductName,
+            CliDefaults.CommandName,
+            ApplicationVersion.Current,
+            options.DryRun,
+            options.FullCleanup,
+            Removed: false,
+            RemovalScheduled: false,
+            Environment.ProcessPath,
+            System.IO.Path.Combine(UpdatePaths.GetDefaultDirectory(), CliDefaults.LocalMetadataFileName),
+            options.FullCleanup ? UpdatePaths.GetDefaultAgentSkillDirectory() : null,
             "No update service is configured."));
 
     private static UpdateCheckDocument CreateUnavailableCheck()
@@ -183,7 +201,7 @@ public sealed class UpdateService : IUpdateService
     public async Task<UpdateApplyDocument> ApplyAsync(UpdateCommandOptions options, CancellationToken cancellationToken)
     {
         UpdateContext context = await BuildContextAsync(options, cancellationToken);
-        string targetPath = await ResolveTargetPathAsync(options, context.Rid, cancellationToken);
+        string targetPath = await ResolveTargetPathAsync(options.InstallDirectory, context.Rid, "update", cancellationToken);
 
         if (!context.UpdateAvailable && !options.Force)
         {
@@ -251,6 +269,61 @@ public sealed class UpdateService : IUpdateService
         }
     }
 
+    /// <inheritdoc />
+    public async Task<UninstallDocument> UninstallAsync(UninstallCommandOptions options, CancellationToken cancellationToken)
+    {
+        string rid = RuntimeRidDetector.GetCurrentRid();
+        string targetPath = await ResolveTargetPathAsync(options.InstallDirectory, rid, "uninstall", cancellationToken);
+        string metadataPath = _metadataStore.Path;
+        string? agentSkillPath = options.FullCleanup ? UpdatePaths.GetDefaultAgentSkillDirectory() : null;
+        string? metadataDirectory = Path.GetDirectoryName(metadataPath);
+
+        if (options.DryRun)
+        {
+            string dryRunMessage = options.FullCleanup
+                ? $"Would uninstall {CliDefaults.CommandName} from {targetPath} and remove local config, metadata, and agent skill files."
+                : $"Would uninstall {CliDefaults.CommandName} from {targetPath} and remove install metadata.";
+            return CreateUninstallDocument(options, targetPath, metadataPath, agentSkillPath, removed: false, removalScheduled: false, dryRunMessage);
+        }
+
+        try
+        {
+            ExecutableRemovalResult removal = _executableReplacer.Remove(targetPath);
+            if (options.FullCleanup)
+            {
+                if (!string.IsNullOrWhiteSpace(metadataDirectory) && Directory.Exists(metadataDirectory))
+                {
+                    Directory.Delete(metadataDirectory, recursive: true);
+                }
+
+                if (!string.IsNullOrWhiteSpace(agentSkillPath) && Directory.Exists(agentSkillPath))
+                {
+                    Directory.Delete(agentSkillPath, recursive: true);
+                }
+            }
+            else if (File.Exists(metadataPath))
+            {
+                File.Delete(metadataPath);
+            }
+
+            string message = removal.Scheduled
+                ? $"Uninstall scheduled. {CliDefaults.CommandName} will be removed after this process exits."
+                : removal.Removed
+                    ? $"Uninstalled {CliDefaults.CommandName}."
+                    : $"{CliDefaults.CommandName} was not installed at {targetPath}; local metadata was cleaned up.";
+            if (options.FullCleanup)
+            {
+                message += " Full cleanup removed local config, metadata, and agent skill files.";
+            }
+
+            return CreateUninstallDocument(options, targetPath, metadataPath, agentSkillPath, removal.Removed, removal.Scheduled, message);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new CliException($"Uninstall failed while removing files. {ex.Message}", ExitCodes.Io, "uninstall_io");
+        }
+    }
+
     private async Task<UpdateContext> BuildContextAsync(UpdateCommandOptions options, CancellationToken cancellationToken)
     {
         string rid = RuntimeRidDetector.GetCurrentRid();
@@ -274,12 +347,12 @@ public sealed class UpdateService : IUpdateService
         return new UpdateContext(manifest, manifestUrl, currentVersion, latestVersion, updateAvailable, rid, DateTimeOffset.UtcNow, asset);
     }
 
-    private async Task<string> ResolveTargetPathAsync(UpdateCommandOptions options, string rid, CancellationToken cancellationToken)
+    private async Task<string> ResolveTargetPathAsync(string? installDirectory, string rid, string commandName, CancellationToken cancellationToken)
     {
         string executableName = RuntimeRidDetector.GetExecutableFileName(rid);
-        if (!string.IsNullOrWhiteSpace(options.InstallDirectory))
+        if (!string.IsNullOrWhiteSpace(installDirectory))
         {
-            return CliPath.GetFullPath(Path.Combine(options.InstallDirectory, executableName));
+            return CliPath.GetFullPath(Path.Combine(installDirectory, executableName));
         }
 
         InstallMetadataDocument metadata = await _metadataStore.LoadInstallMetadataAsync(cancellationToken);
@@ -294,7 +367,7 @@ public sealed class UpdateService : IUpdateService
             return CliPath.GetFullPath(Environment.ProcessPath);
         }
 
-        throw new CliException("Unable to determine the installed executable path. Re-run update with --install-dir <directory>.", ExitCodes.Configuration, "update_install_path_unknown");
+        throw new CliException($"Unable to determine the installed executable path. Re-run {commandName} with --install-dir <directory>.", ExitCodes.Configuration, $"{commandName}_install_path_unknown");
     }
 
     private static UpdateApplyDocument CreateApplyDocument(
@@ -317,6 +390,27 @@ public sealed class UpdateService : IUpdateService
             targetPath,
             context.ManifestUrl.ToString(),
             context.Asset,
+            message);
+
+    private static UninstallDocument CreateUninstallDocument(
+        UninstallCommandOptions options,
+        string targetPath,
+        string metadataPath,
+        string? agentSkillPath,
+        bool removed,
+        bool removalScheduled,
+        string message)
+        => new(
+            CliDefaults.ProductName,
+            CliDefaults.CommandName,
+            ApplicationVersion.Current,
+            options.DryRun,
+            options.FullCleanup,
+            removed,
+            removalScheduled,
+            targetPath,
+            metadataPath,
+            agentSkillPath,
             message);
 
     private static Uri ResolveManifestUri(UpdateCommandOptions options)
@@ -362,7 +456,9 @@ public sealed class UpdateService : IUpdateService
     }
 
     private static bool IsUpdateCommand(IReadOnlyList<string> rawArgs)
-        => rawArgs.Count > 0 && rawArgs[0].Equals("update", StringComparison.OrdinalIgnoreCase);
+        => rawArgs.Count > 0
+        && (rawArgs[0].Equals("update", StringComparison.OrdinalIgnoreCase)
+            || rawArgs[0].Equals("uninstall", StringComparison.OrdinalIgnoreCase));
 
     private async Task TrySaveStateAsync(UpdateStateDocument state, CancellationToken cancellationToken)
     {
@@ -737,6 +833,25 @@ public sealed class ExecutableReplacer
         }
     }
 
+    /// <summary>Removes or schedules removal of the installed executable.</summary>
+    public ExecutableRemovalResult Remove(string targetExecutable)
+    {
+        string removalTarget = ResolveExecutablePath(targetExecutable);
+        if (!File.Exists(removalTarget))
+        {
+            return new ExecutableRemovalResult(Removed: false, Scheduled: false);
+        }
+
+        if (OperatingSystem.IsWindows() || IsCurrentProcessExecutable(removalTarget, _currentProcessPath))
+        {
+            _replacementScheduler.ScheduleRemoval(removalTarget, _currentProcessId);
+            return new ExecutableRemovalResult(Removed: false, Scheduled: true);
+        }
+
+        File.Delete(removalTarget);
+        return new ExecutableRemovalResult(Removed: true, Scheduled: false);
+    }
+
     internal static bool IsCurrentProcessExecutable(string targetExecutable, string? currentProcessPath)
     {
         if (string.IsNullOrWhiteSpace(currentProcessPath))
@@ -799,6 +914,8 @@ public sealed class ExecutableReplacer
 internal interface IExecutableReplacementScheduler
 {
     void ScheduleReplacement(string stagedPath, string targetExecutable, int currentProcessId);
+
+    void ScheduleRemoval(string targetExecutable, int currentProcessId);
 }
 
 internal sealed class ExecutableReplacementScheduler : IExecutableReplacementScheduler
@@ -812,6 +929,17 @@ internal sealed class ExecutableReplacementScheduler : IExecutableReplacementSch
         }
 
         ScheduleUnixReplacement(stagedPath, targetExecutable, currentProcessId);
+    }
+
+    public void ScheduleRemoval(string targetExecutable, int currentProcessId)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            ScheduleWindowsRemoval(targetExecutable, currentProcessId);
+            return;
+        }
+
+        ScheduleUnixRemoval(targetExecutable, currentProcessId);
     }
 
     private static void ScheduleWindowsReplacement(string stagedPath, string targetExecutable, int currentProcessId)
@@ -860,6 +988,41 @@ internal sealed class ExecutableReplacementScheduler : IExecutableReplacementSch
     internal static string CreateWindowsReplacementArguments(string scriptPath)
         => $"/d /s /c \"\"{scriptPath}\"\"";
 
+    internal static string CreateWindowsRemovalArguments(string scriptPath)
+        => $"/d /s /c \"\"{scriptPath}\"\"";
+
+    private static void ScheduleWindowsRemoval(string targetExecutable, int currentProcessId)
+    {
+        string scriptPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"azimg-uninstall-{Guid.NewGuid():N}.cmd");
+        string script = string.Join(
+            Environment.NewLine,
+            "@echo off",
+            "setlocal",
+            "set \"parent_pid=%AZIMG_UNINSTALL_PID%\"",
+            "set \"target_path=%AZIMG_UNINSTALL_TARGET%\"",
+            ":wait_for_parent",
+            "tasklist /FI \"PID eq %parent_pid%\" 2>NUL | findstr /R /C:\" %parent_pid% \" >NUL",
+            "if not errorlevel 1 (",
+            "  timeout /T 1 /NOBREAK >NUL",
+            "  goto wait_for_parent",
+            ")",
+            "del \"%target_path%\" >NUL 2>NUL",
+            "del \"%~f0\" >NUL 2>NUL",
+            "exit /B 0",
+            string.Empty);
+        File.WriteAllText(scriptPath, script);
+        ProcessStartInfo startInfo = new("cmd.exe")
+        {
+            Arguments = CreateWindowsRemovalArguments(scriptPath),
+            CreateNoWindow = true,
+            UseShellExecute = false,
+            WindowStyle = ProcessWindowStyle.Hidden,
+        };
+        startInfo.Environment["AZIMG_UNINSTALL_PID"] = currentProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        startInfo.Environment["AZIMG_UNINSTALL_TARGET"] = targetExecutable;
+        Process.Start(startInfo)?.Dispose();
+    }
+
     private static void ScheduleUnixReplacement(string stagedPath, string targetExecutable, int currentProcessId)
     {
         string scriptPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"azimg-update-{Guid.NewGuid():N}.sh");
@@ -905,6 +1068,37 @@ internal sealed class ExecutableReplacementScheduler : IExecutableReplacementSch
         startInfo.ArgumentList.Add(targetExecutable);
         Process.Start(startInfo)?.Dispose();
     }
+
+    private static void ScheduleUnixRemoval(string targetExecutable, int currentProcessId)
+    {
+        string scriptPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"azimg-uninstall-{Guid.NewGuid():N}.sh");
+        string script = string.Join(
+            Environment.NewLine,
+            "#!/bin/sh",
+            "set -u",
+            "parent_pid=\"$1\"",
+            "target_path=\"$2\"",
+            "while kill -0 \"$parent_pid\" 2>/dev/null; do",
+            "  sleep 0.2",
+            "done",
+            "rm -f \"$target_path\" \"$0\"",
+            string.Empty);
+        File.WriteAllText(scriptPath, script);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(scriptPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        ProcessStartInfo startInfo = new("/bin/sh")
+        {
+            CreateNoWindow = true,
+            UseShellExecute = false,
+        };
+        startInfo.ArgumentList.Add(scriptPath);
+        startInfo.ArgumentList.Add(currentProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        startInfo.ArgumentList.Add(targetExecutable);
+        Process.Start(startInfo)?.Dispose();
+    }
 }
 
 /// <summary>
@@ -912,6 +1106,13 @@ internal sealed class ExecutableReplacementScheduler : IExecutableReplacementSch
 /// </summary>
 /// <param name="Scheduled">Whether replacement was scheduled for after the current process exits.</param>
 public sealed record ExecutableReplacementResult(bool Scheduled);
+
+/// <summary>
+/// Result of removing the executable.
+/// </summary>
+/// <param name="Removed">Whether the executable was removed before returning.</param>
+/// <param name="Scheduled">Whether removal was scheduled for after the current process exits.</param>
+public sealed record ExecutableRemovalResult(bool Removed, bool Scheduled);
 
 /// <summary>
 /// Computes exact portable RIDs supported by the first release matrix.
@@ -1002,6 +1203,13 @@ internal static class UpdatePaths
         string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         string root = string.IsNullOrWhiteSpace(home) ? AppContext.BaseDirectory : home;
         return System.IO.Path.Combine(root, CliDefaults.ConfigDirectoryName);
+    }
+
+    public static string GetDefaultAgentSkillDirectory()
+    {
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string root = string.IsNullOrWhiteSpace(home) ? AppContext.BaseDirectory : home;
+        return System.IO.Path.Combine(root, CliDefaults.AgentsDirectoryName, CliDefaults.AgentSkillsDirectoryName, CliDefaults.AgentSkillName);
     }
 }
 

@@ -80,6 +80,7 @@ public sealed class CommandDispatcher
             "config" => await RunConfigAsync(commandArgs, cancellationToken),
             "install-skill" => await RunInstallSkillAsync(commandArgs, cancellationToken),
             "update" => await RunUpdateAsync(commandArgs, cancellationToken),
+            "uninstall" => await RunUninstallAsync(commandArgs, cancellationToken),
             "version" => RunVersion(commandArgs),
             _ => throw new CliException($"Unknown command '{args[0]}'. Run '{CliDefaults.CommandName} --help' for usage.", ExitCodes.Usage),
         };
@@ -525,6 +526,42 @@ public sealed class CommandDispatcher
         throw new CliException($"Unsupported update action '{action}'.", ExitCodes.Usage);
     }
 
+    private async Task<int> RunUninstallAsync(string[] args, CancellationToken cancellationToken)
+    {
+        ParsedArguments parsed = CommandLineParser.Parse(args, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["h"] = "help",
+            ["?"] = "help",
+        }, CreateUninstallValueOptions(), CreateUninstallFlagOptions());
+
+        if (parsed.GetFlag("help"))
+        {
+            _helpText.WriteUninstallHelp(Console.Out);
+            return ExitCodes.Success;
+        }
+
+        string? actionOption = parsed.Get("action");
+        parsed.ThrowIfExtraPositionals(actionOption is null ? 1 : 0, "uninstall accepts at most one action positional argument.");
+        string action = (actionOption ?? parsed.GetPositionalOrDefault(0) ?? "remove").Trim();
+        bool fullCleanup = action.Equals("full-cleanup", StringComparison.OrdinalIgnoreCase);
+        if (!fullCleanup
+            && !action.Equals("remove", StringComparison.OrdinalIgnoreCase)
+            && !action.Equals("default", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new CliException($"Unsupported uninstall action '{action}'.", ExitCodes.Usage);
+        }
+
+        bool json = parsed.RequestsJsonOutput();
+        UninstallCommandOptions options = new(
+            parsed.Get("install-dir"),
+            parsed.GetFlag("dry-run"),
+            fullCleanup);
+
+        UninstallDocument document = await _updateService.UninstallAsync(options, cancellationToken);
+        WriteUninstall(document, json);
+        return ExitCodes.Success;
+    }
+
     private static void WriteUpdateCheck(UpdateCheckDocument document, bool json)
     {
         if (json)
@@ -547,6 +584,17 @@ public sealed class CommandDispatcher
         if (json)
         {
             Console.WriteLine(JsonDefaults.Serialize(document, CliJsonContext.Default.UpdateApplyDocument));
+            return;
+        }
+
+        Console.WriteLine(document.Message);
+    }
+
+    private static void WriteUninstall(UninstallDocument document, bool json)
+    {
+        if (json)
+        {
+            Console.WriteLine(JsonDefaults.Serialize(document, CliJsonContext.Default.UninstallDocument));
             return;
         }
 
@@ -661,6 +709,14 @@ public sealed class CommandDispatcher
             "format",
         };
 
+    private static HashSet<string> CreateUninstallValueOptions()
+        => new(StringComparer.OrdinalIgnoreCase)
+        {
+            "action",
+            "install-dir",
+            "format",
+        };
+
     private static HashSet<string> CreateInstallSkillValueOptions()
         => new(StringComparer.OrdinalIgnoreCase)
         {
@@ -703,6 +759,13 @@ public sealed class CommandDispatcher
         HashSet<string> options = CreateHelpFlagOptions();
         options.Add("dry-run");
         options.Add("force");
+        return options;
+    }
+
+    private static HashSet<string> CreateUninstallFlagOptions()
+    {
+        HashSet<string> options = CreateHelpFlagOptions();
+        options.Add("dry-run");
         return options;
     }
 

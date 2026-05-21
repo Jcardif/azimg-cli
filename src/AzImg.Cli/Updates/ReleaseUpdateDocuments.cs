@@ -124,6 +124,17 @@ public sealed record UpdateCommandOptions(
     bool Force);
 
 /// <summary>
+/// Parsed options for <c>azimg uninstall</c>.
+/// </summary>
+/// <param name="InstallDirectory">An optional directory that contains the executable to remove.</param>
+/// <param name="DryRun">Whether to report the intended work without changing files.</param>
+/// <param name="FullCleanup">Whether to remove config, metadata, and the installed agent skill.</param>
+public sealed record UninstallCommandOptions(
+    string? InstallDirectory,
+    bool DryRun,
+    bool FullCleanup);
+
+/// <summary>
 /// JSON shape emitted by <c>azimg update check</c> unless <c>--format text</c> is passed.
 /// </summary>
 public sealed record UpdateCheckDocument(
@@ -153,4 +164,20 @@ public sealed record UpdateApplyDocument(
     string? TargetPath,
     string ManifestUrl,
     ReleaseAssetDocument? Asset,
+    string Message);
+
+/// <summary>
+/// JSON shape emitted by <c>azimg uninstall</c> unless <c>--format text</c> is passed.
+/// </summary>
+public sealed record UninstallDocument(
+    string Product,
+    string CommandName,
+    string CurrentVersion,
+    bool DryRun,
+    bool FullCleanup,
+    bool Removed,
+    bool RemovalScheduled,
+    string? TargetPath,
+    string MetadataPath,
+    string? AgentSkillPath,
     string Message);

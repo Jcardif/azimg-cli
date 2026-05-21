@@ -9,7 +9,7 @@ The executable command is `azimg`.
 
 - Non-interactive by default for agents, scripts, CI, and unattended shells.
 - Azure OpenAI image generation and image editing workflows.
-- Local config profiles for endpoint, deployment, and output directory defaults.
+- Local config profiles for endpoint and deployment settings.
 - Optional manifests with paths, checksums, usage, deployment, and timestamps.
 - Installable agent skill that helps AI agents use `azimg` correctly.
 
@@ -24,16 +24,68 @@ Supported release platforms:
 
 ### macOS and Linux
 
+<!-- markdownlint-disable MD013 -->
+
 ```bash
-curl -fsSL \
-  https://raw.githubusercontent.com/Jcardif/azimg-cli/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Jcardif/azimg-cli/main/install.sh | bash
 ```
+
+<!-- markdownlint-enable MD013 -->
 
 ### Windows PowerShell
 
+<!-- markdownlint-disable MD013 -->
+
 ```powershell
-iwr https://raw.githubusercontent.com/Jcardif/azimg-cli/main/install.ps1 `
-  -UseB | iex
+iwr https://raw.githubusercontent.com/Jcardif/azimg-cli/main/install.ps1 -UseB | iex
+```
+
+<!-- markdownlint-enable MD013 -->
+
+### Uninstallation
+
+Use the CLI for the normal uninstall path. It removes the installed executable
+and install metadata while keeping `~/.azimg/config.json`.
+
+```bash
+azimg uninstall --format text
+```
+
+Use `full-cleanup` when you also want to delete local config and the installed
+agent skill:
+
+```bash
+azimg uninstall full-cleanup --format text
+```
+
+Manual uninstall fallback:
+
+macOS and Linux:
+
+```bash
+rm -f ~/.local/bin/azimg
+rm -f ~/.azimg/metadata.json
+```
+
+Windows PowerShell:
+
+```powershell
+Remove-Item "$env:LOCALAPPDATA\Programs\azimg\azimg.exe" -Force
+Remove-Item "$env:USERPROFILE\.azimg\metadata.json" -Force
+```
+
+Manual full cleanup:
+
+```bash
+rm -rf ~/.agents/skills/azimg
+rm -rf ~/.azimg
+```
+
+Windows PowerShell full cleanup:
+
+```powershell
+Remove-Item "$env:USERPROFILE\.agents\skills\azimg" -Recurse -Force
+Remove-Item "$env:USERPROFILE\.azimg" -Recurse -Force
 ```
 
 ### Agent skill
@@ -72,38 +124,25 @@ Assign it on the Azure OpenAI resource.
 
 To assign the role via Azure CLI:
 
-```bash
-resource_id="/subscriptions/<sub>/resourceGroups/<rg>"
-resource_id="$resource_id/providers/Microsoft.CognitiveServices"
-resource_id="$resource_id/accounts/<resource>"
+<!-- markdownlint-disable MD013 -->
 
-az role assignment create \
-  --assignee "<your-user-or-service-principal>" \
-  --role "Cognitive Services OpenAI User" \
-  --scope "$resource_id"
+```bash
+az role assignment create --assignee "<your-user-or-service-principal>" --role "Cognitive Services OpenAI User" --scope "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<resource>"
 ```
+
+<!-- markdownlint-enable MD013 -->
 
 ## 🚀 Usage example
 
 Generate the `azimg-cli` repository banner:
 
-```bash
-prompt="Generate a banner image 16:9 for a repo for azimg-cli,"
-prompt="$prompt a command-line tool that generates images with Azure OpenAI."
+<!-- markdownlint-disable MD013 -->
 
-azimg generate \
-  "$prompt" \
-  --profile azure-default \
-  --count 1 \
-  --size 1536x864 \
-  --quality high \
-  --background opaque \
-  --output-format png \
-  --output-directory ./output/banner \
-  --name-template azimg-cli-banner \
-  --write-manifest \
-  --format text
+```bash
+azimg generate "Generate a banner image 16:9 for a repo for azimg-cli, a command-line tool that generates images with Azure OpenAI." --profile azure-default --count 1 --size 1536x864 --quality high --background opaque --output-format png --output-directory ./output/banner --name-template azimg-cli-banner --write-manifest --format text
 ```
+
+<!-- markdownlint-enable MD013 -->
 
 This writes the banner image and manifest to `./output/banner`.
 
@@ -114,12 +153,13 @@ Run `azimg config init --force`, or pass values up front so no manual edit is
 needed. The default output folder is `azimg-output`, resolved relative to the
 directory where you run `azimg`.
 
+<!-- markdownlint-disable MD013 -->
+
 ```bash
-azimg config init --force \
-  --profile azure-default \
-  --deployment gpt-image-2 \
-  --endpoint https://your-resource.openai.azure.com/
+azimg config init --force --profile azure-default --deployment gpt-image-2 --endpoint https://your-resource.openai.azure.com/
 ```
+
+<!-- markdownlint-enable MD013 -->
 
 ```json
 {
@@ -155,6 +195,7 @@ Commands below omit the leading `azimg` unless the command is global.
 | `install-skill` | Install the AzImg agent skill. | None. |
 | `update check` | Check for a newer release. | None. |
 | `update` or `update apply` | Install the selected release. | None. |
+| `uninstall` | Remove the installed executable. | None. |
 | `version` | Print version information. | None. |
 
 ### Profile, Azure, and output options
@@ -205,6 +246,15 @@ Use these with `generate` and `edit`.
 - `--manifest-url <URL>` uses an explicit release manifest.
 - `--dry-run` previews update work without changing files.
 - `--force` reinstalls even when the selected release is already current.
+
+### Uninstall options
+
+- `uninstall` removes the executable and install metadata, but keeps
+  `~/.azimg/config.json`.
+- `uninstall full-cleanup` also removes `~/.azimg` and the installed AzImg
+  agent skill.
+- `--install-dir <PATH>` selects the directory that contains `azimg`.
+- `--dry-run` previews uninstall work without changing files.
 
 ### Agent skill options
 

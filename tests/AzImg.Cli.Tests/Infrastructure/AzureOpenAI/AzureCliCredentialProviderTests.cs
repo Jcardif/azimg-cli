@@ -19,21 +19,20 @@ public class AzureCliCredentialProviderTests
         Assert.False(startInfo.UseShellExecute);
         Assert.False(startInfo.RedirectStandardOutput);
         Assert.False(startInfo.RedirectStandardError);
-        string arguments = OperatingSystem.IsWindows()
-            ? startInfo.Arguments
-            : string.Join(" ", startInfo.ArgumentList);
+        string arguments = string.Join(" ", startInfo.ArgumentList);
         Assert.Contains("get-access-token", arguments, StringComparison.Ordinal);
         Assert.Contains("--only-show-errors", arguments, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void CreateWindowsArguments_UsesCmdStringWithoutBackslashEscapedQuotes()
+    public void CreateWindowsCommand_UsesPowerShellEnvironmentRedirection()
     {
-        string arguments = AzureCliProcessAccessTokenSource.CreateWindowsArguments();
+        string command = AzureCliProcessAccessTokenSource.CreateWindowsCommand();
 
-        Assert.Contains("/d /s /c \"\"az.cmd\"", arguments, StringComparison.Ordinal);
-        Assert.Contains("\"%AZIMG_STDOUT%\" 2> \"%AZIMG_STDERR%\"", arguments, StringComparison.Ordinal);
-        Assert.DoesNotContain("\\\"", arguments, StringComparison.Ordinal);
+        Assert.Contains("az account get-access-token", command, StringComparison.Ordinal);
+        Assert.Contains("$env:AZIMG_RESOURCE", command, StringComparison.Ordinal);
+        Assert.Contains("> $env:AZIMG_STDOUT 2> $env:AZIMG_STDERR", command, StringComparison.Ordinal);
+        Assert.DoesNotContain("az.cmd", command, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

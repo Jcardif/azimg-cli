@@ -23,6 +23,7 @@ public sealed class HelpTextProvider
         writer.WriteLine("  config     Initialize, inspect, or update CLI configuration.");
         writer.WriteLine("  install-skill Install the AzImg agent skill.");
         writer.WriteLine("  update     Check for or install a newer azimg release.");
+        writer.WriteLine("  uninstall  Remove the installed azimg executable.");
         writer.WriteLine("  version    Display version information.");
         writer.WriteLine();
         writer.WriteLine($"Run '{CliDefaults.CommandName} <command> --help' for more information about a command.");
@@ -115,6 +116,20 @@ public sealed class HelpTextProvider
         writer.WriteLine("      --manifest-url <url>         Explicit release manifest URL for advanced automation.");
         writer.WriteLine("      --dry-run                    Report intended update work without changing files.");
         writer.WriteLine("      --force                      Reinstall even when the selected release is current.");
+        WriteStructuredOutputOptions(writer);
+    }
+
+    /// <summary>Writes help for uninstall commands.</summary>
+    public void WriteUninstallHelp(TextWriter writer)
+    {
+        writer.WriteLine($"Usage: {CliDefaults.CommandName} uninstall [full-cleanup] [options]");
+        writer.WriteLine("Actions:");
+        writer.WriteLine("  remove                      Remove the executable and install metadata; default.");
+        writer.WriteLine("  full-cleanup                Also remove config and installed AzImg agent skill.");
+        writer.WriteLine("Options:");
+        writer.WriteLine("      --action <value>             Explicit action name.");
+        writer.WriteLine("      --install-dir <path>         Directory containing the azimg executable to remove.");
+        writer.WriteLine("      --dry-run                    Report intended uninstall work without changing files.");
         WriteStructuredOutputOptions(writer);
     }
 

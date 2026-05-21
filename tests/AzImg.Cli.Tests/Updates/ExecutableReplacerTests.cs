@@ -38,6 +38,68 @@ public class ExecutableReplacerTests
     }
 
     [Fact]
+    public void Remove_SchedulesCurrentProcessExecutableWithoutDeletingRunningBundle()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string target = Path.Combine(directory, "azimg");
+        FakeReplacementScheduler scheduler = new();
+        ExecutableReplacer replacer = new(target, 12345, scheduler);
+
+        try
+        {
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(target, "installed");
+
+            ExecutableRemovalResult result = replacer.Remove(target);
+
+            Assert.True(result.Scheduled);
+            Assert.False(result.Removed);
+            Assert.True(File.Exists(target));
+            Assert.Equal(target, scheduler.RemovalTargetExecutable);
+            Assert.Equal(12345, scheduler.RemovalCurrentProcessId);
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Remove_DeletesNonRunningExecutable()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string target = Path.Combine(directory, "azimg");
+        ExecutableReplacer replacer = new(Path.Combine(directory, "other"), 12345, new FakeReplacementScheduler());
+
+        try
+        {
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(target, "installed");
+
+            ExecutableRemovalResult result = replacer.Remove(target);
+
+            Assert.True(result.Removed);
+            Assert.False(result.Scheduled);
+            Assert.False(File.Exists(target));
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void IsCurrentProcessExecutable_MatchesFullPathUsingPlatformComparison()
     {
         string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
@@ -88,6 +150,15 @@ public class ExecutableReplacerTests
         Assert.DoesNotContain("\\\"", arguments, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void CreateWindowsRemovalArguments_UsesCmdStringWithoutBackslashEscapedQuotes()
+    {
+        string arguments = ExecutableReplacementScheduler.CreateWindowsRemovalArguments(@"C:\Temp\azimg-uninstall.cmd");
+
+        Assert.Equal("/d /s /c \"\"C:\\Temp\\azimg-uninstall.cmd\"\"", arguments);
+        Assert.DoesNotContain("\\\"", arguments, StringComparison.Ordinal);
+    }
+
     private sealed class FakeReplacementScheduler : IExecutableReplacementScheduler
     {
         public string? StagedPath { get; private set; }
@@ -96,11 +167,21 @@ public class ExecutableReplacerTests
 
         public int CurrentProcessId { get; private set; }
 
+        public string? RemovalTargetExecutable { get; private set; }
+
+        public int RemovalCurrentProcessId { get; private set; }
+
         public void ScheduleReplacement(string stagedPath, string targetExecutable, int currentProcessId)
         {
             StagedPath = stagedPath;
             TargetExecutable = targetExecutable;
             CurrentProcessId = currentProcessId;
+        }
+
+        public void ScheduleRemoval(string targetExecutable, int currentProcessId)
+        {
+            RemovalTargetExecutable = targetExecutable;
+            RemovalCurrentProcessId = currentProcessId;
         }
     }
 }

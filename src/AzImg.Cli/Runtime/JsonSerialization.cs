@@ -71,6 +71,7 @@ public static class JsonDefaults
 [JsonSerializable(typeof(UpdateStateDocument))]
 [JsonSerializable(typeof(UpdateCheckDocument))]
 [JsonSerializable(typeof(UpdateApplyDocument))]
+[JsonSerializable(typeof(UninstallDocument))]
 [JsonSerializable(typeof(CliErrorDocument))]
 [JsonSerializable(typeof(SavedImageFile[]))]
 [JsonSerializable(typeof(DiagnosticCheck[]))]

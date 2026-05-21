@@ -287,19 +287,25 @@ internal sealed class AzureCliProcessAccessTokenSource : IAzureCliAccessTokenSou
     {
         ProcessStartInfo startInfo = new()
         {
-            FileName = "cmd.exe",
-            Arguments = CreateWindowsArguments(),
+            FileName = "powershell.exe",
         };
 
+        startInfo.ArgumentList.Add("-NoLogo");
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-NonInteractive");
+        startInfo.ArgumentList.Add("-ExecutionPolicy");
+        startInfo.ArgumentList.Add("Bypass");
+        startInfo.ArgumentList.Add("-Command");
+        startInfo.ArgumentList.Add(CreateWindowsCommand());
         startInfo.Environment["AZIMG_RESOURCE"] = resource;
         startInfo.Environment["AZIMG_STDOUT"] = stdoutPath;
         startInfo.Environment["AZIMG_STDERR"] = stderrPath;
         return startInfo;
     }
 
-    internal static string CreateWindowsArguments()
-        => "/d /s /c \"\"az.cmd\" \"account\" \"get-access-token\" \"--resource\" \"%AZIMG_RESOURCE%\" "
-            + "\"--output\" \"json\" \"--only-show-errors\" > \"%AZIMG_STDOUT%\" 2> \"%AZIMG_STDERR%\"\"";
+    internal static string CreateWindowsCommand()
+        => "& az account get-access-token --resource $env:AZIMG_RESOURCE --output json --only-show-errors "
+            + "> $env:AZIMG_STDOUT 2> $env:AZIMG_STDERR; exit $LASTEXITCODE";
 
     internal static AzureCliAccessToken ParseAccessTokenOutput(string output)
     {

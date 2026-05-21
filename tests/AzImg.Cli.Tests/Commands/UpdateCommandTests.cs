@@ -79,6 +79,58 @@ public class UpdateCommandTests
     }
 
     [Fact]
+    public async Task UninstallDefaultAction_RemovesExecutableAndMetadataOnly()
+    {
+        FakeUpdateService updateService = new();
+        CommandDispatcher application = CreateApplication(updateService);
+        using StringWriter writer = new();
+        TextWriter originalOut = Console.Out;
+
+        Console.SetOut(writer);
+        try
+        {
+            int exitCode = await application.RunAsync(["uninstall", "--dry-run", "--format", "text"], CancellationToken.None);
+
+            Assert.Equal(ExitCodes.Success, exitCode);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
+
+        Assert.Equal(1, updateService.UninstallCalls);
+        Assert.True(updateService.LastUninstallOptions?.DryRun);
+        Assert.False(updateService.LastUninstallOptions?.FullCleanup);
+        Assert.Contains("Would uninstall", writer.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UninstallFullCleanupAction_PassesFullCleanupOption()
+    {
+        FakeUpdateService updateService = new();
+        CommandDispatcher application = CreateApplication(updateService);
+
+        int exitCode = await application.RunAsync(["uninstall", "full-cleanup"], CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Equal(1, updateService.UninstallCalls);
+        Assert.True(updateService.LastUninstallOptions?.FullCleanup);
+    }
+
+    [Fact]
+    public async Task Uninstall_RejectsPositionalActionWhenActionOptionIsSupplied()
+    {
+        FakeUpdateService updateService = new();
+        CommandDispatcher application = CreateApplication(updateService);
+
+        CliException exception = await Assert.ThrowsAsync<CliException>(() => application.RunAsync(["uninstall", "full-cleanup", "--action", "remove"], CancellationToken.None));
+
+        Assert.Equal(ExitCodes.Usage, exception.ExitCode);
+        Assert.Contains("action positional", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(0, updateService.UninstallCalls);
+    }
+
+    [Fact]
     public async Task FirstLaunchCheck_RunsBeforeNormalCommandsWithoutStdoutPollution()
     {
         FakeUpdateService updateService = new()
@@ -132,13 +184,19 @@ public class UpdateCommandTests
 
         public int ApplyCalls { get; private set; }
 
+        public int UninstallCalls { get; private set; }
+
         public string? FirstLaunchNotice { get; init; }
 
         public UpdateCommandOptions? LastApplyOptions { get; private set; }
 
+        public UninstallCommandOptions? LastUninstallOptions { get; private set; }
+
         public Task NotifyIfFirstLaunchAsync(IReadOnlyList<string> rawArgs, TextWriter diagnostics, CancellationToken cancellationToken)
         {
-            if (rawArgs.Count > 0 && rawArgs[0].Equals("update", StringComparison.OrdinalIgnoreCase))
+            if (rawArgs.Count > 0
+                && (rawArgs[0].Equals("update", StringComparison.OrdinalIgnoreCase)
+                    || rawArgs[0].Equals("uninstall", StringComparison.OrdinalIgnoreCase)))
             {
                 return Task.CompletedTask;
             }
@@ -185,6 +243,24 @@ public class UpdateCommandTests
                 "https://example.invalid/azimg-release.json",
                 new ReleaseAssetDocument("linux-x64", "azimg-linux-x64.tar.gz", new string('a', 64), 123, "tar.gz", "linux", "x64"),
                 options.DryRun ? "Would update azimg." : "Updated azimg."));
+        }
+
+        public Task<UninstallDocument> UninstallAsync(UninstallCommandOptions options, CancellationToken cancellationToken)
+        {
+            UninstallCalls++;
+            LastUninstallOptions = options;
+            return Task.FromResult(new UninstallDocument(
+                CliDefaults.ProductName,
+                CliDefaults.CommandName,
+                "0.1.0",
+                options.DryRun,
+                options.FullCleanup,
+                Removed: false,
+                RemovalScheduled: false,
+                "/tmp/azimg",
+                "/tmp/.azimg/metadata.json",
+                options.FullCleanup ? "/tmp/.agents/skills/azimg" : null,
+                options.DryRun ? "Would uninstall azimg." : "Uninstalled azimg."));
         }
     }
 }
