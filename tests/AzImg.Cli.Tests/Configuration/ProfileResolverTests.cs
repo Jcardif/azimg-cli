@@ -29,7 +29,7 @@ public class ProfileResolverTests
 
         Assert.Equal("override-deployment", resolved.DeploymentName);
         Assert.Equal(new Uri("https://example.openai.azure.com/"), resolved.Endpoint);
-        Assert.Equal("/tmp/override-output", resolved.OutputDirectory);
+        Assert.Equal(CliPath.GetFullPath("/tmp/override-output"), resolved.OutputDirectory);
     }
 
     [Fact]
