@@ -166,6 +166,18 @@ azimg edit ./characters/josh.jpg "Create a polished full-page manga comic page u
 This writes `./test-opt/comic-page.png` and
 `./test-opt/comic-page.manifest.json`.
 
+Use `--mask-file` instead when you want to constrain an edit to part of the
+first input image:
+
+```bash
+azimg edit ./room.png "Replace only the couch with a red velvet sofa" \
+  --mask-file ./masks/couch-mask.png \
+  --output-directory ./test-opt
+```
+
+Use both together when the first image is the canvas, `--image` provides visual
+references, and `--mask-file` marks where the first image should change.
+
 ## ⚙️ Configuration and common settings
 
 The default configuration file is `~/.azimg/config.json`.
@@ -244,15 +256,21 @@ Use these with `generate` and `edit`.
 - Tokens: `{timestamp}`, `{id}`, `{slug}`, `{index}`, and `{profile}`.
 - `--write-manifest`: Write a manifest JSON file beside the images.
 - `--image <PATH>`: Additional input/reference image or image folder for
-  `edit`. Repeat this option to include multiple files or folders.
-- `--mask-file <PATH>`: PNG mask for `edit` only. The mask applies to the
-  first input image.
+  `edit`. Use this for character, product, style, logo, or other visual
+  references. Repeat this option to include multiple files or folders.
+- `--mask-file <PATH>`: PNG mask for `edit` only. Use this to target where the
+  first input image should change. The mask applies to the first input image.
 
 For `edit`, the positional input can be an image file or a folder. Image
 folders expand to supported image files in deterministic order. Supported image
 extensions are `.png`, `.jpg`, `.jpeg`, and `.webp`. Local non-PNG edit inputs
 are normalized to temporary PNG files before upload. Masks are not normalized;
 provide mask files as PNGs with the expected alpha channel.
+
+Use `--image` when the extra file should influence the result visually. Use
+`--mask-file` when the extra file is a transparency mask that identifies an edit
+region. They can be combined: the mask selects the area on the first image, and
+additional `--image` inputs provide references for what to put there.
 
 ### Config options
 
