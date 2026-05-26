@@ -18,7 +18,7 @@ public sealed class HelpTextProvider
         writer.WriteLine();
         writer.WriteLine("Commands:");
         writer.WriteLine("  generate   Generate one or more images from a prompt.");
-        writer.WriteLine("  edit       Edit an existing image, optionally using a mask.");
+        writer.WriteLine("  edit       Edit existing images or use them as references.");
         writer.WriteLine("  doctor     Validate configuration, credentials, and output setup.");
         writer.WriteLine("  config     Initialize, inspect, or update CLI configuration.");
         writer.WriteLine("  install-skill Install the AzImg agent skill.");
@@ -43,9 +43,10 @@ public sealed class HelpTextProvider
     /// <summary>Writes help for the image edit command.</summary>
     public void WriteEditHelp(TextWriter writer)
     {
-        writer.WriteLine($"Usage: {CliDefaults.CommandName} edit <input-file> <prompt> [options]");
+        writer.WriteLine($"Usage: {CliDefaults.CommandName} edit <input-file-or-folder> <prompt> [options]");
         writer.WriteLine("Options:");
-        writer.WriteLine("      --mask-file <path>           Optional PNG mask image.");
+        writer.WriteLine("      --image <path>               Additional input image or folder. Repeatable.");
+        writer.WriteLine("      --mask-file <path>           Optional PNG mask image for the first input image.");
         WriteProfileOptions(writer);
         writer.WriteLine("      --count <n>                  Number of edited images, 1-10.");
         WriteImageOptions(writer);

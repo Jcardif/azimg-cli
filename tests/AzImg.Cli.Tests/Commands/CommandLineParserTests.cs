@@ -66,6 +66,21 @@ public class CommandLineParserTests
     }
 
     [Fact]
+    public void Parse_RepeatedValueOption_PreservesAllValuesAndReturnsLastValue()
+    {
+        ParsedArguments parsed = CommandLineParser.Parse(
+            ["--image", "one.png", "--image=two.png", "input.png", "prompt"],
+            new Dictionary<string, string>(),
+            new HashSet<string>(["image"], StringComparer.OrdinalIgnoreCase),
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+        Assert.Equal("two.png", parsed.Get("image"));
+        Assert.Equal(new[] { "one.png", "two.png" }, parsed.GetValues("image"));
+        Assert.Equal("input.png", parsed.GetRequiredPositional(0, "missing"));
+        Assert.Equal("prompt", parsed.GetRequiredPositional(1, "missing"));
+    }
+
+    [Fact]
     public void RequestsJsonOutput_DefaultsToJson()
     {
         ParsedArguments parsed = CommandLineParser.Parse([], new Dictionary<string, string>());

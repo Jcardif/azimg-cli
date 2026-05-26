@@ -13,13 +13,26 @@ namespace AzImg.Cli.Commands;
 /// </remarks>
 public sealed class ParsedArguments
 {
-    private readonly Dictionary<string, string> _options;
+    private readonly Dictionary<string, List<string>> _options;
     private readonly List<string> _positionals;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ParsedArguments" /> class.
     /// </summary>
     public ParsedArguments(Dictionary<string, string> options, List<string> positionals)
+        : this(
+            options.ToDictionary(
+                pair => pair.Key,
+                pair => new List<string> { pair.Value },
+                options.Comparer),
+            positionals)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ParsedArguments" /> class.
+    /// </summary>
+    public ParsedArguments(Dictionary<string, List<string>> options, List<string> positionals)
     {
         _options = options;
         _positionals = positionals;
@@ -27,11 +40,15 @@ public sealed class ParsedArguments
 
     /// <summary>Gets a named option value, or <see langword="null" /> when omitted.</summary>
     public string? Get(string name)
-        => _options.TryGetValue(name, out string? value) ? value : null;
+        => _options.TryGetValue(name, out List<string>? values) && values.Count > 0 ? values[^1] : null;
+
+    /// <summary>Gets all values supplied for a repeatable named option.</summary>
+    public IReadOnlyList<string> GetValues(string name)
+        => _options.TryGetValue(name, out List<string>? values) ? values : Array.Empty<string>();
 
     /// <summary>Gets whether a flag-style option is present and truthy.</summary>
     public bool GetFlag(string name)
-        => _options.TryGetValue(name, out string? value)
+        => Get(name) is { } value
            && (string.IsNullOrWhiteSpace(value)
                || value.Equals("true", StringComparison.OrdinalIgnoreCase));
 
@@ -139,7 +156,7 @@ public static class CommandLineParser
         IReadOnlySet<string>? valueOptions,
         IReadOnlySet<string>? flagOptions)
     {
-        Dictionary<string, string> options = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, List<string>> options = new(StringComparer.OrdinalIgnoreCase);
         List<string> positionals = [];
         bool strict = valueOptions is not null || flagOptions is not null;
         valueOptions ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -202,7 +219,7 @@ public static class CommandLineParser
                     }
                 }
 
-                options[name] = value;
+                AddOption(options, name, value);
                 continue;
             }
 
@@ -233,7 +250,7 @@ public static class CommandLineParser
                     value = "true";
                 }
 
-                options[mappedName] = value;
+                AddOption(options, mappedName, value);
                 continue;
             }
 
@@ -241,6 +258,17 @@ public static class CommandLineParser
         }
 
         return new ParsedArguments(options, positionals);
+    }
+
+    private static void AddOption(Dictionary<string, List<string>> options, string name, string value)
+    {
+        if (!options.TryGetValue(name, out List<string>? values))
+        {
+            values = [];
+            options[name] = values;
+        }
+
+        values.Add(value);
     }
 
     private static void ValidateLongOption(

@@ -172,13 +172,14 @@ public sealed class CommandDispatcher
         }
 
         bool json = parsed.RequestsJsonOutput();
-        string inputFile = parsed.GetRequiredPositional(0, "edit requires an input image path.");
+        string inputFile = parsed.GetRequiredPositional(0, "edit requires an input image path or image folder.");
         string prompt = parsed.GetRequiredPositional(1, "edit requires a prompt.");
-        parsed.ThrowIfExtraPositionals(2, "edit accepts exactly an input image path and one prompt. Quote multi-word prompts as a single argument.");
+        parsed.ThrowIfExtraPositionals(2, "edit accepts exactly an input image path or folder and one prompt. Quote multi-word prompts as a single argument.");
         int count = parsed.GetInt32("count", 1);
         int? outputCompression = parsed.GetOptionalInt32("output-compression");
+        IReadOnlyList<string> inputFiles = EditInputFileResolver.Resolve(inputFile, parsed.GetValues("image"));
         EditImageRequest request = new(
-            CliPath.GetFullPath(inputFile),
+            inputFiles,
             parsed.Get("mask-file") is { Length: > 0 } maskFile ? CliPath.GetFullPath(maskFile) : null,
             prompt,
             count,
@@ -677,6 +678,7 @@ public sealed class CommandDispatcher
     private static HashSet<string> CreateEditValueOptions()
     {
         HashSet<string> options = CreateImageValueOptions();
+        options.Add("image");
         options.Add("mask-file");
         return options;
     }

@@ -70,14 +70,20 @@ azimg generate "Minimal app icon" \
 Use this when the user provides an input image and asks to alter it.
 
 ```bash
-azimg edit <input-file> <prompt> [image options]
+azimg edit <input-file-or-folder> <prompt> [image options]
 ```
 
 ### Edit options
 
-- `<input-file>`: Always required; must be an existing local image path.
+- `<input-file-or-folder>`: Always required; must be an existing local image
+  path or a folder of image files.
 - `<prompt>`: Always required; quote the user's edit instruction.
+- `--image <path>`: Use for each additional input/reference image or image
+  folder. Use this for character, product, style, logo, or other visual
+  references. Repeat this option when the user provides multiple references.
 - `--mask-file <path>`: Use when the user provides a mask for targeted edits.
+  The mask applies to the first input image and controls where that image can
+  change.
 - `--count <n>`: Use for multiple edited versions; valid range is `1` to `10`.
 - `--size <WxH>`: Use when the user requests output dimensions.
 - `--quality <value>`: Use for quality or speed tradeoffs. Allowed values are `auto`, `low`, `medium`, and `high`.
@@ -91,6 +97,18 @@ azimg edit <input-file> <prompt> [image options]
 - `--config <path>`: Use when the user provides a non-default config file.
 - `--deployment <name>` and `--endpoint <url>`: Use when the user provides inline Azure OpenAI settings.
 
+Local edit input images can be PNG, JPEG, JPG, or WebP. The CLI normalizes
+non-PNG edit inputs to temporary PNG files before upload. Mask files are not
+normalized; use PNG masks with an alpha channel.
+
+Choose edit inputs this way:
+
+- Use `--image` when the extra file is a visual reference the model should use.
+- Use `--mask-file` when the extra file is a PNG transparency mask selecting
+  the area to edit on the first input image.
+- Use both when the first image is the canvas, the mask marks where it should
+  change, and additional images provide character/product/style references.
+
 Examples:
 
 ```bash
@@ -101,6 +119,16 @@ azimg edit input.png "Replace the sky with sunset clouds" \
   --mask-file mask.png \
   --output-directory ./azimg-output/edits \
   --write-manifest
+
+azimg edit blank-page.jpg "Create a manga comic page using these character references" \
+  --image character-a.jpg \
+  --image character-b.jpg \
+  --output-directory ./azimg-output/manga
+
+azimg edit room.png "Replace the couch with the red sofa from the reference" \
+  --mask-file couch-mask.png \
+  --image red-sofa-reference.jpg \
+  --output-directory ./azimg-output/edits
 ```
 
 ## Minimal unblockers

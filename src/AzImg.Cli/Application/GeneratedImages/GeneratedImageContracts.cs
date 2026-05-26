@@ -26,10 +26,10 @@ public sealed record GenerateImageRequest(
     bool WriteManifest);
 
 /// <summary>
-/// User request for editing an existing image, optionally constrained by a mask image.
+/// User request for editing existing images, optionally constrained by a mask image.
 /// </summary>
-/// <param name="InputFile">The local image file to edit.</param>
-/// <param name="MaskFile">An optional local PNG mask file.</param>
+/// <param name="InputFiles">The local image files to edit or use as references.</param>
+/// <param name="MaskFile">An optional local PNG mask file applied to the first input image.</param>
 /// <param name="Prompt">The edit prompt to send to Azure OpenAI.</param>
 /// <param name="Count">The number of edited images to request.</param>
 /// <param name="Size">An optional image size in <c>WIDTHxHEIGHT</c> format.</param>
@@ -41,7 +41,7 @@ public sealed record GenerateImageRequest(
 /// <param name="NameTemplate">The file-name template used when saving results.</param>
 /// <param name="WriteManifest">Whether a manifest JSON sidecar should be written.</param>
 public sealed record EditImageRequest(
-    string InputFile,
+    IReadOnlyList<string> InputFiles,
     string? MaskFile,
     string Prompt,
     int Count,
