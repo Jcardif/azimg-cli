@@ -11,7 +11,7 @@
     <Title>AzImg CLI</Title>
     <Product>AzImg CLI</Product>
     <Description>Azure OpenAI image generation CLI authenticated with Azure CLI credentials.</Description>
-    <Version>0.1.5</Version>
+    <Version>0.2.0</Version>
     <RuntimeIdentifiers>win-x64;win-arm64;osx-arm64;linux-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
