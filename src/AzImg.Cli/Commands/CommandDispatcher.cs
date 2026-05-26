@@ -147,47 +147,6 @@ public sealed class CommandDispatcher
             return ExitCodes.Success;
         }
 
-        private static async Task<string> ResolveGeneratePromptAsync(ParsedArguments parsed, CancellationToken cancellationToken)
-        {
-            string? promptFile = parsed.Get("prompt-file");
-            if (promptFile is null)
-            {
-                string prompt = parsed.GetRequiredPositional(0, "generate requires a prompt or --prompt-file <path>.");
-                parsed.ThrowIfExtraPositionals(1, "generate accepts exactly one prompt. Quote multi-word prompts as a single argument.");
-                return prompt;
-            }
-
-            if (string.IsNullOrWhiteSpace(promptFile))
-            {
-                throw new CliException("Option '--prompt-file' expects a path.", ExitCodes.Usage);
-            }
-
-            parsed.ThrowIfExtraPositionals(0, "generate accepts either one prompt or --prompt-file <path>, not both.");
-            string promptPath = CliPath.GetFullPath(promptFile);
-            if (Directory.Exists(promptPath))
-            {
-                throw new CliException($"Prompt file '{promptPath}' is a directory.", ExitCodes.Validation);
-            }
-
-            if (!File.Exists(promptPath))
-            {
-                throw new CliException($"Prompt file '{promptPath}' was not found.", ExitCodes.Validation);
-            }
-
-            try
-            {
-                return await File.ReadAllTextAsync(promptPath, cancellationToken);
-            }
-            catch (UnauthorizedAccessException exception)
-            {
-                throw new CliException($"Prompt file '{promptPath}' could not be read: {exception.Message}", ExitCodes.Io);
-            }
-            catch (IOException exception)
-            {
-                throw new CliException($"Prompt file '{promptPath}' could not be read: {exception.Message}", ExitCodes.Io);
-            }
-        }
-
         foreach (SavedImageFile file in saveResult.Files)
         {
             Console.WriteLine(file.Path);
@@ -213,8 +172,7 @@ public sealed class CommandDispatcher
 
         bool json = parsed.RequestsJsonOutput();
         string inputFile = parsed.GetRequiredPositional(0, "edit requires an input image path or image folder.");
-        string prompt = parsed.GetRequiredPositional(1, "edit requires a prompt.");
-        parsed.ThrowIfExtraPositionals(2, "edit accepts exactly an input image path or folder and one prompt. Quote multi-word prompts as a single argument.");
+        string prompt = await ResolveEditPromptAsync(parsed, cancellationToken);
         int count = parsed.GetInt32("count", 1);
         int? outputCompression = parsed.GetOptionalInt32("output-compression");
         IReadOnlyList<string> inputFiles = EditInputFileResolver.Resolve(inputFile, parsed.GetValues("image"));
@@ -278,6 +236,66 @@ public sealed class CommandDispatcher
         }
 
         return ExitCodes.Success;
+    }
+
+    private static async Task<string> ResolveGeneratePromptAsync(ParsedArguments parsed, CancellationToken cancellationToken)
+    {
+        string? promptFile = parsed.Get("prompt-file");
+        if (promptFile is null)
+        {
+            string prompt = parsed.GetRequiredPositional(0, "generate requires a prompt or --prompt-file <path>.");
+            parsed.ThrowIfExtraPositionals(1, "generate accepts exactly one prompt. Quote multi-word prompts as a single argument.");
+            return prompt;
+        }
+
+        parsed.ThrowIfExtraPositionals(0, "generate accepts either one prompt or --prompt-file <path>, not both.");
+        return await ReadPromptFileAsync(promptFile, cancellationToken);
+    }
+
+    private static async Task<string> ResolveEditPromptAsync(ParsedArguments parsed, CancellationToken cancellationToken)
+    {
+        string? promptFile = parsed.Get("prompt-file");
+        if (promptFile is null)
+        {
+            string prompt = parsed.GetRequiredPositional(1, "edit requires a prompt or --prompt-file <path>.");
+            parsed.ThrowIfExtraPositionals(2, "edit accepts exactly an input image path or folder and one prompt. Quote multi-word prompts as a single argument.");
+            return prompt;
+        }
+
+        parsed.ThrowIfExtraPositionals(1, "edit accepts exactly an input image path or folder and either one prompt or --prompt-file <path>, not both.");
+        return await ReadPromptFileAsync(promptFile, cancellationToken);
+    }
+
+    private static async Task<string> ReadPromptFileAsync(string promptFile, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(promptFile))
+        {
+            throw new CliException("Option '--prompt-file' expects a path.", ExitCodes.Usage);
+        }
+
+        string promptPath = CliPath.GetFullPath(promptFile);
+        if (Directory.Exists(promptPath))
+        {
+            throw new CliException($"Prompt file '{promptPath}' is a directory.", ExitCodes.Validation);
+        }
+
+        if (!File.Exists(promptPath))
+        {
+            throw new CliException($"Prompt file '{promptPath}' was not found.", ExitCodes.Validation);
+        }
+
+        try
+        {
+            return await File.ReadAllTextAsync(promptPath, cancellationToken);
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            throw new CliException($"Prompt file '{promptPath}' could not be read: {exception.Message}", ExitCodes.Io);
+        }
+        catch (IOException exception)
+        {
+            throw new CliException($"Prompt file '{promptPath}' could not be read: {exception.Message}", ExitCodes.Io);
+        }
     }
 
     private async Task<int> RunDoctorAsync(string[] args, CancellationToken cancellationToken)
@@ -487,12 +505,18 @@ public sealed class CommandDispatcher
         string version = ApplicationVersion.Current;
         if (parsed.RequestsJsonOutput())
         {
-            VersionDocument document = new(CliDefaults.ProductName, CliDefaults.CommandName, version);
+            VersionDocument document = new(
+                CliDefaults.ProductName,
+                CliDefaults.CommandName,
+                version,
+                CliDefaults.AgentSkillName,
+                CliDefaults.AgentSkillVersion);
             Console.WriteLine(JsonDefaults.Serialize(document, CliJsonContext.Default.VersionDocument));
             return ExitCodes.Success;
         }
 
         Console.WriteLine($"{CliDefaults.ProductName} {version}");
+        Console.WriteLine($"{CliDefaults.AgentSkillName} skill {CliDefaults.AgentSkillVersion}");
         return ExitCodes.Success;
     }
 

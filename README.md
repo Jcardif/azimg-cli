@@ -226,8 +226,8 @@ Commands below omit the leading `azimg` unless the command is global.
 | --- | --- | --- |
 | `--help` | Show top-level help. | None. |
 | `<command> --help` | Show command help. | Command name. |
-| `generate <PROMPT>` or `generate --prompt-file <TXT>` | Generate images from text. | Prompt text or a text file. |
-| `edit <FILE_OR_FOLDER> <PROMPT>` | Edit images or use them as references. | File/folder and prompt. |
+| `generate` | Generate images. | `<PROMPT>` or `--prompt-file <TXT>`. |
+| `edit` | Edit images. | Image plus `<PROMPT>` or `--prompt-file <TXT>`. |
 | `doctor` | Validate config and output setup. | None. |
 | `config` or `config show` | Print the current config. | None. |
 | `config init` | Create a starter config. | Optional profile values. |
@@ -236,7 +236,7 @@ Commands below omit the leading `azimg` unless the command is global.
 | `update check` | Check for a newer release. | None. |
 | `update` or `update apply` | Install the selected release. | None. |
 | `uninstall` | Remove the installed executable. | None. |
-| `version` | Print version information. | None. |
+| `version` | Print CLI and bundled skill version information. | None. |
 
 ### Profile, Azure, and output options
 
@@ -253,9 +253,9 @@ Use these with `generate`, `edit`, and `doctor` for per-run settings.
 
 Use these with `generate` and `edit`.
 
-- `--prompt-file <PATH>`: Read the `generate` prompt from a text file instead
-  of passing `<PROMPT>` inline. Use this for long prompts; do not combine it
-  with a positional prompt.
+- `--prompt-file <PATH>`: Read the `generate` or `edit` prompt from a text
+  file instead of passing `<PROMPT>` inline. Use this for long prompts; do not
+  combine it with a positional prompt.
 - `--count <N>`: Number of images to create, from `1` to `10`.
 - `--size <WIDTHxHEIGHT>`: Image size, such as `1024x1024`.
 - `--quality <auto|low|medium|high>`: Requested image quality.
@@ -304,6 +304,11 @@ additional `--image` inputs provide references for what to put there.
 - `--manifest-url <URL>` uses an explicit release manifest.
 - `--dry-run` previews update work without changing files.
 - `--force` reinstalls even when the selected release is already current.
+
+### Version output
+
+- `version` prints both the AzImg CLI version and the bundled AzImg agent skill
+  version.
 
 ### Uninstall options
 

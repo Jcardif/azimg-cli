@@ -1,5 +1,6 @@
 ---
 name: azimg
+version: 0.2.1
 description: Use for image creation and image editing only. Use `azimg generate` when the request asks to generate, create, or make a new image. Use `azimg edit` only when the request provides an input image to modify.
 compatibility: Requires azimg on path
 ---
@@ -37,8 +38,10 @@ azimg generate --prompt-file <path> [image options]
 
 ### Generate options
 
-- `<prompt>`: Required unless `--prompt-file` is used; quote the user's image prompt.
-- `--prompt-file <path>`: Use when the user provides a long prompt in a text file. Do not also pass `<prompt>`.
+- `<prompt>`: Required unless `--prompt-file` is used; quote the user's
+  image prompt.
+- `--prompt-file <path>`: Use when the user provides a long prompt in a text
+  file. Do not also pass `<prompt>`.
 - `--count <n>`: Use for multiple variations; valid range is `1` to `10`.
 - `--size <WxH>`: Use for requested dimensions, such as `1024x1024`.
 - `--quality <value>`: Use for quality or speed tradeoffs. Allowed values are `auto`, `low`, `medium`, and `high`.
@@ -77,13 +80,17 @@ Use this when the user provides an input image and asks to alter it.
 
 ```bash
 azimg edit <input-file-or-folder> <prompt> [image options]
+azimg edit <input-file-or-folder> --prompt-file <path> [image options]
 ```
 
 ### Edit options
 
 - `<input-file-or-folder>`: Always required; must be an existing local image
   path or a folder of image files.
-- `<prompt>`: Always required; quote the user's edit instruction.
+- `<prompt>`: Required unless `--prompt-file` is used; quote the user's edit
+  instruction.
+- `--prompt-file <path>`: Use when the user provides a long edit prompt in a
+  text file. Do not also pass `<prompt>`.
 - `--image <path>`: Use for each additional input/reference image or image
   folder. Use this for character, product, style, logo, or other visual
   references. Repeat this option when the user provides multiple references.

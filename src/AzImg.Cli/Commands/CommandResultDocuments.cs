@@ -26,7 +26,14 @@ public sealed record ImageCommandResultDocument(
 /// <param name="Product">The product name.</param>
 /// <param name="CommandName">The executable command name.</param>
 /// <param name="Version">The semantic version from the assembly.</param>
-public sealed record VersionDocument(string Product, string CommandName, string Version);
+/// <param name="SkillName">The bundled agent skill name.</param>
+/// <param name="SkillVersion">The bundled agent skill version.</param>
+public sealed record VersionDocument(
+    string Product,
+    string CommandName,
+    string Version,
+    string SkillName,
+    string SkillVersion);
 
 /// <summary>
 /// JSON shape emitted by <c>azimg install-skill</c> unless <c>--format text</c> is passed.

@@ -29,7 +29,12 @@ public class CommandDispatcherTests
             Console.SetOut(originalOut);
         }
 
-        Assert.StartsWith($"{CliDefaults.ProductName} ", writer.ToString().Trim(), StringComparison.Ordinal);
+        string output = writer.ToString();
+        Assert.Contains($"{CliDefaults.ProductName} ", output, StringComparison.Ordinal);
+        Assert.Contains(
+            $"{CliDefaults.AgentSkillName} skill {CliDefaults.AgentSkillVersion}",
+            output,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -54,6 +59,8 @@ public class CommandDispatcherTests
         string output = writer.ToString();
         Assert.Contains("\"commandName\": \"azimg\"", output, StringComparison.Ordinal);
         Assert.Contains("\"product\":", output, StringComparison.Ordinal);
+        Assert.Contains("\"skillName\": \"azimg\"", output, StringComparison.Ordinal);
+        Assert.Contains($"\"skillVersion\": \"{CliDefaults.AgentSkillVersion}\"", output, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -228,7 +235,8 @@ public class CommandDispatcherTests
         FakeGeneratedImageClient imageClient = new();
         CommandDispatcher application = CreateApplication(imageClient);
 
-        CliException exception = await Assert.ThrowsAsync<CliException>(() => application.RunAsync(["generate", "--prompt-file", "prompt.txt", "inline prompt"], CancellationToken.None));
+        CliException exception = await Assert.ThrowsAsync<CliException>(
+            () => application.RunAsync(["generate", "--prompt-file", "prompt.txt", "inline prompt"], CancellationToken.None));
 
         Assert.Equal(ExitCodes.Usage, exception.ExitCode);
         Assert.Contains("either one prompt or --prompt-file", exception.Message, StringComparison.Ordinal);
@@ -326,6 +334,82 @@ public class CommandDispatcherTests
                 Directory.Delete(directory, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public async Task Edit_ReadsPromptFromPromptFile()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string inputFile = Path.Combine(directory, "input.png");
+        string promptFile = Path.Combine(directory, "edit-prompt.txt");
+        string missingConfigPath = Path.Combine(directory, "missing-config.json");
+        string prompt = "Replace the background with a misty forest.\nKeep the subject unchanged.";
+        FakeGeneratedImageClient imageClient = new();
+        CommandDispatcher application = CreateApplication(imageClient);
+        using StringWriter stdout = new();
+        using StringWriter stderr = new();
+        TextWriter originalOut = Console.Out;
+        TextWriter originalError = Console.Error;
+
+        Directory.CreateDirectory(directory);
+        await File.WriteAllBytesAsync(inputFile, [137, 80, 78, 71]);
+        await File.WriteAllTextAsync(promptFile, prompt);
+        Console.SetOut(stdout);
+        Console.SetError(stderr);
+        try
+        {
+            int exitCode = await application.RunAsync(
+                [
+                    "edit",
+                    "--config", missingConfigPath,
+                    "--deployment", "gpt-image-2",
+                    "--endpoint", "https://example.openai.azure.com/",
+                    "--output-directory", directory,
+                    "--prompt-file", promptFile,
+                    "--name-template", "file-edit",
+                    "--format", "text",
+                    inputFile
+                ],
+                CancellationToken.None);
+
+            Assert.Equal(ExitCodes.Success, exitCode);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
+
+        try
+        {
+            Assert.Equal(1, imageClient.EditCalls);
+            Assert.NotNull(imageClient.LastEditRequest);
+            Assert.Equal(new[] { inputFile }, imageClient.LastEditRequest.InputFiles);
+            Assert.Equal(prompt, imageClient.LastEditRequest.Prompt);
+            Assert.Contains(Path.Combine(directory, "file-edit.png"), stdout.ToString(), StringComparison.Ordinal);
+            Assert.True(File.Exists(Path.Combine(directory, "file-edit.png")));
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Edit_RejectsPromptFileWithPositionalPromptBeforeCallingImageClient()
+    {
+        FakeGeneratedImageClient imageClient = new();
+        CommandDispatcher application = CreateApplication(imageClient);
+
+        CliException exception = await Assert.ThrowsAsync<CliException>(
+            () => application.RunAsync(["edit", "input.png", "--prompt-file", "prompt.txt", "inline prompt"], CancellationToken.None));
+
+        Assert.Equal(ExitCodes.Usage, exception.ExitCode);
+        Assert.Contains("either one prompt or --prompt-file", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(0, imageClient.EditCalls);
     }
 
     [Fact]

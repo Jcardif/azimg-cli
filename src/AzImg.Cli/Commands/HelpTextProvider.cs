@@ -24,7 +24,7 @@ public sealed class HelpTextProvider
         writer.WriteLine("  install-skill Install the AzImg agent skill.");
         writer.WriteLine("  update     Check for or install a newer azimg release.");
         writer.WriteLine("  uninstall  Remove the installed azimg executable.");
-        writer.WriteLine("  version    Display version information.");
+        writer.WriteLine("  version    Display CLI and AzImg skill version information.");
         writer.WriteLine();
         writer.WriteLine($"Run '{CliDefaults.CommandName} <command> --help' for more information about a command.");
     }
@@ -32,7 +32,7 @@ public sealed class HelpTextProvider
     /// <summary>Writes help for the image generation command.</summary>
     public void WriteGenerateHelp(TextWriter writer)
     {
-        writer.WriteLine($"Usage: {CliDefaults.CommandName} generate <prompt>|--prompt-file <path> [options]");
+        writer.WriteLine($"Usage: {CliDefaults.CommandName} generate (<prompt>|--prompt-file <path>) [options]");
         writer.WriteLine("Options:");
         WriteProfileOptions(writer);
         writer.WriteLine("      --prompt-file <path>         Read the prompt from a UTF-8 text file.");
@@ -44,11 +44,12 @@ public sealed class HelpTextProvider
     /// <summary>Writes help for the image edit command.</summary>
     public void WriteEditHelp(TextWriter writer)
     {
-        writer.WriteLine($"Usage: {CliDefaults.CommandName} edit <input-file-or-folder> <prompt> [options]");
+        writer.WriteLine($"Usage: {CliDefaults.CommandName} edit <input-file-or-folder> (<prompt>|--prompt-file <path>) [options]");
         writer.WriteLine("Options:");
         writer.WriteLine("      --image <path>               Additional input image or folder. Repeatable.");
         writer.WriteLine("      --mask-file <path>           Optional PNG mask image for the first input image.");
         WriteProfileOptions(writer);
+        writer.WriteLine("      --prompt-file <path>         Read the prompt from a UTF-8 text file.");
         writer.WriteLine("      --count <n>                  Number of edited images, 1-10.");
         WriteImageOptions(writer);
         WriteOutputOptions(writer);
@@ -86,6 +87,7 @@ public sealed class HelpTextProvider
     public void WriteVersionHelp(TextWriter writer)
     {
         writer.WriteLine($"Usage: {CliDefaults.CommandName} version [options]");
+        writer.WriteLine("Displays the CLI version and bundled AzImg agent skill version.");
         writer.WriteLine("Options:");
         WriteStructuredOutputOptions(writer);
     }

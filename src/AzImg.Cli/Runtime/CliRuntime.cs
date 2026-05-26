@@ -79,6 +79,9 @@ public static class CliDefaults
     /// <summary>The agent skill installed by <c>azimg install-skill</c>.</summary>
     public const string AgentSkillName = "azimg";
 
+    /// <summary>The bundled AzImg agent skill version.</summary>
+    public const string AgentSkillVersion = "0.2.1";
+
     /// <summary>The top-level hidden directory that stores agent customizations.</summary>
     public const string AgentsDirectoryName = ".agents";
 
