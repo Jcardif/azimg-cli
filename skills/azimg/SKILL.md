@@ -70,14 +70,18 @@ azimg generate "Minimal app icon" \
 Use this when the user provides an input image and asks to alter it.
 
 ```bash
-azimg edit <input-file> <prompt> [image options]
+azimg edit <input-file-or-folder> <prompt> [image options]
 ```
 
 ### Edit options
 
-- `<input-file>`: Always required; must be an existing local image path.
+- `<input-file-or-folder>`: Always required; must be an existing local image
+  path or a folder of image files.
 - `<prompt>`: Always required; quote the user's edit instruction.
+- `--image <path>`: Use for each additional input/reference image or image
+  folder. Repeat this option when the user provides multiple references.
 - `--mask-file <path>`: Use when the user provides a mask for targeted edits.
+  The mask applies to the first input image.
 - `--count <n>`: Use for multiple edited versions; valid range is `1` to `10`.
 - `--size <WxH>`: Use when the user requests output dimensions.
 - `--quality <value>`: Use for quality or speed tradeoffs. Allowed values are `auto`, `low`, `medium`, and `high`.
@@ -91,6 +95,10 @@ azimg edit <input-file> <prompt> [image options]
 - `--config <path>`: Use when the user provides a non-default config file.
 - `--deployment <name>` and `--endpoint <url>`: Use when the user provides inline Azure OpenAI settings.
 
+Local edit input images can be PNG, JPEG, JPG, or WebP. The CLI normalizes
+non-PNG edit inputs to temporary PNG files before upload. Mask files are not
+normalized; use PNG masks with an alpha channel.
+
 Examples:
 
 ```bash
@@ -101,6 +109,11 @@ azimg edit input.png "Replace the sky with sunset clouds" \
   --mask-file mask.png \
   --output-directory ./azimg-output/edits \
   --write-manifest
+
+azimg edit blank-page.jpg "Create a manga comic page using these character references" \
+  --image character-a.jpg \
+  --image character-b.jpg \
+  --output-directory ./azimg-output/manga
 ```
 
 ## Minimal unblockers

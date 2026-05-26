@@ -221,6 +221,7 @@ public class CommandDispatcherTests
         {
             Assert.Equal(1, imageClient.EditCalls);
             Assert.NotNull(imageClient.LastEditRequest);
+            Assert.Equal(new[] { inputFile }, imageClient.LastEditRequest.InputFiles);
             Assert.Equal("Make it blue", imageClient.LastEditRequest.Prompt);
 
             string output = stdout.ToString();
@@ -232,6 +233,76 @@ public class CommandDispatcherTests
             Assert.Contains("Editing 1 image", diagnosticOutput, StringComparison.Ordinal);
             Assert.Contains("Edited 1 file", diagnosticOutput, StringComparison.Ordinal);
             Assert.DoesNotContain("Saving 1 image", diagnosticOutput, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Edit_AcceptsRepeatedImageFilesAndDirectoriesAsInputImages()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string referenceDirectory = Path.Combine(directory, "references");
+        string inputFile = Path.Combine(directory, "input.png");
+        string referenceFile = Path.Combine(directory, "character-a.png");
+        string firstDirectoryReference = Path.Combine(referenceDirectory, "character-b.jpeg");
+        string secondDirectoryReference = Path.Combine(referenceDirectory, "character-c.webp");
+        string missingConfigPath = Path.Combine(directory, "missing-config.json");
+        FakeGeneratedImageClient imageClient = new();
+        CommandDispatcher application = CreateApplication(imageClient);
+        using StringWriter stdout = new();
+        using StringWriter stderr = new();
+        TextWriter originalOut = Console.Out;
+        TextWriter originalError = Console.Error;
+
+        Directory.CreateDirectory(referenceDirectory);
+        await File.WriteAllBytesAsync(inputFile, [137, 80, 78, 71]);
+        await File.WriteAllBytesAsync(referenceFile, [137, 80, 78, 71]);
+        await File.WriteAllBytesAsync(secondDirectoryReference, [1]);
+        await File.WriteAllBytesAsync(firstDirectoryReference, [2]);
+        await File.WriteAllTextAsync(Path.Combine(referenceDirectory, "notes.txt"), "ignored");
+        Console.SetOut(stdout);
+        Console.SetError(stderr);
+        try
+        {
+            int exitCode = await application.RunAsync(
+                [
+                    "edit",
+                    "--config", missingConfigPath,
+                    "--deployment", "gpt-image-2",
+                    "--endpoint", "https://example.openai.azure.com/",
+                    "--output-directory", directory,
+                    "--image", referenceFile,
+                    "--image", referenceDirectory,
+                    "--count", "1",
+                    "--name-template", "manga",
+                    inputFile,
+                    "Create a manga comic panel with these characters"
+                ],
+                CancellationToken.None);
+
+            Assert.Equal(ExitCodes.Success, exitCode);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
+
+        try
+        {
+            Assert.Equal(1, imageClient.EditCalls);
+            Assert.NotNull(imageClient.LastEditRequest);
+            Assert.Equal(
+                new[] { inputFile, referenceFile, firstDirectoryReference, secondDirectoryReference },
+                imageClient.LastEditRequest.InputFiles);
+            Assert.Equal("Create a manga comic panel with these characters", imageClient.LastEditRequest.Prompt);
+            Assert.True(File.Exists(Path.Combine(directory, "manga.png")));
         }
         finally
         {

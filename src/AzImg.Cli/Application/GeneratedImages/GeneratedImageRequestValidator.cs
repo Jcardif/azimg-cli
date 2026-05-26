@@ -49,9 +49,22 @@ public sealed class GeneratedImageRequestValidator
             throw new CliException("Prompt is required.", ExitCodes.Validation);
         }
 
-        if (!File.Exists(request.InputFile))
+        if (request.InputFiles.Count == 0)
         {
-            throw new CliException($"Input image '{request.InputFile}' was not found.", ExitCodes.Validation);
+            throw new CliException("At least one input image is required.", ExitCodes.Validation);
+        }
+
+        if (request.InputFiles.Count > 16)
+        {
+            throw new CliException("Edit requests support at most 16 input images.", ExitCodes.Validation);
+        }
+
+        foreach (string inputFile in request.InputFiles)
+        {
+            if (!File.Exists(inputFile))
+            {
+                throw new CliException($"Input image '{inputFile}' was not found.", ExitCodes.Validation);
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(request.MaskFile) && !File.Exists(request.MaskFile))
