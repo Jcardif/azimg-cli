@@ -97,8 +97,7 @@ public sealed class CommandDispatcher
         }
 
         bool json = parsed.RequestsJsonOutput();
-        string prompt = parsed.GetRequiredPositional(0, "generate requires a prompt.");
-        parsed.ThrowIfExtraPositionals(1, "generate accepts exactly one prompt. Quote multi-word prompts as a single argument.");
+        string prompt = await ResolveGeneratePromptAsync(parsed, cancellationToken);
         int count = parsed.GetInt32("count", 1);
         int? outputCompression = parsed.GetOptionalInt32("output-compression");
         GenerateImageRequest request = new(
@@ -146,6 +145,47 @@ public sealed class CommandDispatcher
                 result.Usage);
             Console.WriteLine(JsonDefaults.Serialize(document, CliJsonContext.Default.ImageCommandResultDocument));
             return ExitCodes.Success;
+        }
+
+        private static async Task<string> ResolveGeneratePromptAsync(ParsedArguments parsed, CancellationToken cancellationToken)
+        {
+            string? promptFile = parsed.Get("prompt-file");
+            if (promptFile is null)
+            {
+                string prompt = parsed.GetRequiredPositional(0, "generate requires a prompt or --prompt-file <path>.");
+                parsed.ThrowIfExtraPositionals(1, "generate accepts exactly one prompt. Quote multi-word prompts as a single argument.");
+                return prompt;
+            }
+
+            if (string.IsNullOrWhiteSpace(promptFile))
+            {
+                throw new CliException("Option '--prompt-file' expects a path.", ExitCodes.Usage);
+            }
+
+            parsed.ThrowIfExtraPositionals(0, "generate accepts either one prompt or --prompt-file <path>, not both.");
+            string promptPath = CliPath.GetFullPath(promptFile);
+            if (Directory.Exists(promptPath))
+            {
+                throw new CliException($"Prompt file '{promptPath}' is a directory.", ExitCodes.Validation);
+            }
+
+            if (!File.Exists(promptPath))
+            {
+                throw new CliException($"Prompt file '{promptPath}' was not found.", ExitCodes.Validation);
+            }
+
+            try
+            {
+                return await File.ReadAllTextAsync(promptPath, cancellationToken);
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                throw new CliException($"Prompt file '{promptPath}' could not be read: {exception.Message}", ExitCodes.Io);
+            }
+            catch (IOException exception)
+            {
+                throw new CliException($"Prompt file '{promptPath}' could not be read: {exception.Message}", ExitCodes.Io);
+            }
         }
 
         foreach (SavedImageFile file in saveResult.Files)
@@ -664,6 +704,7 @@ public sealed class CommandDispatcher
     {
         HashSet<string> options = CreateProfileValueOptions();
         options.Add("count");
+        options.Add("prompt-file");
         options.Add("size");
         options.Add("quality");
         options.Add("background");

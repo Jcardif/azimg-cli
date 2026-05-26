@@ -32,11 +32,13 @@ Use this when the user asks to generate, create, or make a new image.
 
 ```bash
 azimg generate <prompt> [image options]
+azimg generate --prompt-file <path> [image options]
 ```
 
 ### Generate options
 
-- `<prompt>`: Always required; quote the user's image prompt.
+- `<prompt>`: Required unless `--prompt-file` is used; quote the user's image prompt.
+- `--prompt-file <path>`: Use when the user provides a long prompt in a text file. Do not also pass `<prompt>`.
 - `--count <n>`: Use for multiple variations; valid range is `1` to `10`.
 - `--size <WxH>`: Use for requested dimensions, such as `1024x1024`.
 - `--quality <value>`: Use for quality or speed tradeoffs. Allowed values are `auto`, `low`, `medium`, and `high`.
@@ -63,6 +65,10 @@ azimg generate "Minimal app icon" \
   --output-format png \
   --output-directory ./azimg-output/icons \
   --write-manifest
+
+azimg generate --prompt-file ./prompts/banner.txt \
+  --count 1 \
+  --output-directory ./azimg-output/banner
 ```
 
 ## Edit existing images

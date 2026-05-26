@@ -32,9 +32,10 @@ public sealed class HelpTextProvider
     /// <summary>Writes help for the image generation command.</summary>
     public void WriteGenerateHelp(TextWriter writer)
     {
-        writer.WriteLine($"Usage: {CliDefaults.CommandName} generate <prompt> [options]");
+        writer.WriteLine($"Usage: {CliDefaults.CommandName} generate <prompt>|--prompt-file <path> [options]");
         writer.WriteLine("Options:");
         WriteProfileOptions(writer);
+        writer.WriteLine("      --prompt-file <path>         Read the prompt from a UTF-8 text file.");
         writer.WriteLine("      --count <n>                  Number of images, 1-10.");
         WriteImageOptions(writer);
         WriteOutputOptions(writer);

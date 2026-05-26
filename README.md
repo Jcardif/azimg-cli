@@ -146,6 +146,14 @@ azimg generate "Generate a banner image 16:9 for a repo for azimg-cli, a command
 
 This writes the banner image and manifest to `./output/banner`.
 
+For long prompts, put the prompt text in a file:
+
+```bash
+azimg generate --prompt-file ./prompts/banner.txt \
+  --profile azure-default \
+  --output-directory ./output/banner
+```
+
 Create a manga-style comic page from multiple character references:
 
 <!-- markdownlint-disable MD013 -->
@@ -218,7 +226,7 @@ Commands below omit the leading `azimg` unless the command is global.
 | --- | --- | --- |
 | `--help` | Show top-level help. | None. |
 | `<command> --help` | Show command help. | Command name. |
-| `generate <PROMPT>` | Generate images from text. | One quoted prompt. |
+| `generate <PROMPT>` or `generate --prompt-file <TXT>` | Generate images from text. | Prompt text or a text file. |
 | `edit <FILE_OR_FOLDER> <PROMPT>` | Edit images or use them as references. | File/folder and prompt. |
 | `doctor` | Validate config and output setup. | None. |
 | `config` or `config show` | Print the current config. | None. |
@@ -245,6 +253,9 @@ Use these with `generate`, `edit`, and `doctor` for per-run settings.
 
 Use these with `generate` and `edit`.
 
+- `--prompt-file <PATH>`: Read the `generate` prompt from a text file instead
+  of passing `<PROMPT>` inline. Use this for long prompts; do not combine it
+  with a positional prompt.
 - `--count <N>`: Number of images to create, from `1` to `10`.
 - `--size <WIDTHxHEIGHT>`: Image size, such as `1024x1024`.
 - `--quality <auto|low|medium|high>`: Requested image quality.
